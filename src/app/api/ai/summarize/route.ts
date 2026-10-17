@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { getApiUser } from "@/lib/session";
 import { getUserSettings } from "@/lib/app-settings";
 import { resolveModel } from "@/lib/ai/providers";
-import { articleText, errorMessage, languageInstruction } from "@/lib/ai/content";
+import { answerInLanguage, articleText, errorMessage, languageInstruction } from "@/lib/ai/content";
 
 const body = z.object({ articleId: z.string(), force: z.boolean().optional() });
 
@@ -36,7 +36,8 @@ export async function POST(request: Request) {
     userId: resolved.provider.userId ? user.id : "",
     model: resolved.modelId,
     language: settings.language,
-    kind: "summary",
+    // Revisão do prompt: resumos antigos foram gravados no idioma da matéria.
+    kind: "summary-v2",
   };
   if (!force) {
     const cached = await db.articleSummary.findUnique({ where: { articleId_providerId_userId_model_language_kind: cacheKey } });
@@ -49,10 +50,11 @@ export async function POST(request: Request) {
 
   const result = streamText({
     model: resolved.model,
-    instructions: `Você resume artigos para um leitor de RSS, em Markdown.
+    instructions: `${languageInstruction(settings.language)}
+Você resume artigos para um leitor de RSS, em Markdown.
 Formato: uma frase TL;DR em negrito, depois 3 a 6 tópicos curtos com os pontos principais. Se houver números, datas ou nomes relevantes, mantenha-os. Não invente nada que não esteja no texto.
-${languageInstruction(settings.language)}`,
-    prompt: articleText(article),
+Traduza o conteúdo ao resumir: o resumo sai no idioma pedido acima, nunca no idioma da matéria.`,
+    prompt: answerInLanguage(settings.language, articleText(article)),
     maxOutputTokens: 800,
     onFinish: async ({ text }) => {
       if (!text.trim()) return;

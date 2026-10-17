@@ -40,6 +40,21 @@ export const languageInstruction = (code: string) => {
   return `IMPORTANTE: responda somente em ${name}, do início ao fim, mesmo que o artigo ou os trechos fornecidos estejam em outro idioma. Nunca copie ou troque para o idioma do texto-fonte.`;
 };
 
+/**
+ * Coloca o pedido de idioma no próprio prompt do usuário. Vários modelos ignoram
+ * a instrução de sistema e passam a escrever no idioma do artigo.
+ */
+export function answerInLanguage(code: string, body: string) {
+  const name = languageName(code);
+  return `Responda somente em ${name}. O material abaixo pode estar em outro idioma; isso não muda o idioma da resposta.
+
+<material>
+${body}
+</material>
+
+A resposta inteira tem de estar em ${name}. Não use o idioma do material.`;
+}
+
 /** Mensagem legível para o usuário no idioma da interface (padrão pt-BR para logs). */
 export function errorMessage(err: unknown, locale: string = defaultLocale): string {
   const t = staticTranslator(locale, "ai.errors");

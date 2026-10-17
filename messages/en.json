@@ -985,6 +985,8 @@
     "choose": "Choose…",
     "enable": "Enable",
     "update": "Save",
+    "test": "Test",
+    "tested": "It works — vector of {dimensions} dimensions.",
     "disable": "Disable",
     "enabled": "Semantic search enabled. Indexing has started.",
     "disabled": "Semantic search disabled.",

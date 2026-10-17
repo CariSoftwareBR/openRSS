@@ -49,6 +49,7 @@ typography:
   mono:
     fontFamily: "Geist Mono, monospace"
 rounded:
+  button: "4px"
   sm: "0.45rem"
   md: "0.6rem"
   lg: "0.75rem"
@@ -67,13 +68,13 @@ components:
   button-primary:
     backgroundColor: "{colors.primary}"
     textColor: "{colors.primary-foreground}"
-    rounded: "{rounded.lg}"
+    rounded: "{rounded.button}"
     padding: "0 0.625rem"
     height: "2rem"
   button-ghost:
     backgroundColor: "transparent"
     textColor: "{colors.muted-foreground}"
-    rounded: "{rounded.lg}"
+    rounded: "{rounded.button}"
     padding: "0 0.625rem"
     height: "2rem"
   input:
@@ -143,7 +144,7 @@ Elevação estrutural e sutil. Bordas e mudanças tonais fazem a maior parte da 
 ## Components
 
 ### Buttons
-- Cantos `0.75rem`, altura `2rem`. Primary em azul de orientação; Ghost para ações de contexto (marcar lido, salvar, abrir original). Transições de `200ms`; foco com anel de 3 unidades.
+- Cantos `4px`, altura `2rem`. Primary em azul de orientação; Ghost para ações de contexto (marcar lido, salvar, abrir original). Transições de `200ms`; foco com anel de 3 unidades.
 
 ### Article list
 - Linhas compactas; não lidos com título em peso 600 e ponto de acento; lidos em `muted-foreground`. Item selecionado recebe fundo `accent` e anel interno discreto.

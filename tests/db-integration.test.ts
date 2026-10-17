@@ -32,7 +32,7 @@ const { runMigrations } = await import("@/lib/setup/migrate");
 await runMigrations({ provider: "sqlite", url: process.env.DATABASE_URL });
 
 const { db } = await import("@/lib/db");
-const { applyRetention } = await import("@/lib/feeds/refresh");
+const { applyRetention, ingestItems, markStaleUnread, subscribe } = await import("@/lib/feeds/refresh");
 const { encrypt } = await import("@/lib/crypto");
 const { markAllRead } = await import("@/app/actions/articles");
 const { saveProviderAction, setSystemDefaultAction } = await import("@/app/actions/ai");
@@ -51,7 +51,7 @@ const { POST: askArticle } = await import("@/app/api/ai/ask/route");
 const { startFakeOpenAI } = await import("./helpers/fake-openai");
 const { addTagAction, deleteTagAction, removeTagAction, renameTagAction } = await import("@/app/actions/tags");
 const { listTags } = await import("@/lib/tags");
-const { setEmbeddingConfigAction } = await import("@/app/actions/embeddings");
+const { setEmbeddingConfigAction, testEmbeddingAction } = await import("@/app/actions/embeddings");
 const { embedPending } = await import("@/lib/ai/embeddings");
 
 const OLD = new Date(Date.now() - 400 * 86400000);
@@ -421,6 +421,91 @@ describe("save any link", () => {
   });
 });
 
+describe("subscribe backlog", () => {
+  const parsedItem = (guid: string, publishedAt: Date, hasPublishDate = true) => ({
+    guid,
+    url: null,
+    title: guid,
+    author: null,
+    contentHtml: null,
+    snippet: null,
+    imageUrl: null,
+    publishedAt,
+    hasPublishDate,
+  });
+
+  it("marks historical and undated items read, keeps yesterday unread", async () => {
+    const sub = await subscribe("alice", "https://news.example/feed", {
+      parsed: {
+        title: "News",
+        siteUrl: "https://news.example",
+        description: null,
+        iconUrl: null,
+        items: [
+          parsedItem("old", new Date(Date.now() - 14 * 86400000)),
+          parsedItem("fresh", new Date(Date.now() - 3600_000)),
+          parsedItem("undated", new Date(), false),
+        ],
+      },
+    });
+    const articles = Object.fromEntries((await db.article.findMany({ where: { feedId: sub.feedId } })).map((a) => [a.guid, a]));
+    const state = async (guid: string) =>
+      db.userArticle.findUnique({ where: { userId_articleId: { userId: "alice", articleId: articles[guid].id } } });
+
+    expect((await state("old"))?.isRead).toBe(true);
+    expect((await state("undated"))?.isRead).toBe(true);
+    expect(await state("fresh")).toBeNull();
+  });
+
+  it("marks existing old articles read when a second user subscribes", async () => {
+    const feed = await createFeed("https://shared.example/feed", [
+      { guid: "old", publishedAt: new Date(Date.now() - 10 * 86400000) },
+      { guid: "fresh", publishedAt: new Date() },
+    ]);
+    await db.subscription.create({ data: { userId: "alice", feedId: feed.id } });
+    await subscribe("bob", "https://shared.example/feed");
+    const old = feed.articles.find((a) => a.guid === "old")!;
+    const fresh = feed.articles.find((a) => a.guid === "fresh")!;
+    expect((await db.userArticle.findUnique({ where: { userId_articleId: { userId: "bob", articleId: old.id } } }))?.isRead).toBe(true);
+    expect(await db.userArticle.findUnique({ where: { userId_articleId: { userId: "bob", articleId: fresh.id } } })).toBeNull();
+  });
+});
+
+describe("ingest dates", () => {
+  it("corrects a fallback date when the feed later has the real one", async () => {
+    const feed = await createFeed("https://fixdate.example/feed", []);
+    const item = {
+      guid: "same",
+      url: null,
+      title: "A",
+      author: null,
+      contentHtml: null,
+      snippet: null,
+      imageUrl: null,
+      publishedAt: new Date(),
+      hasPublishDate: false,
+    };
+    const real = new Date(Date.now() - 10 * 86400000);
+    await ingestItems(feed.id, [item]);
+    await ingestItems(feed.id, [{ ...item, publishedAt: real, hasPublishDate: true }]);
+    const row = await db.article.findFirstOrThrow({ where: { feedId: feed.id, guid: "same" } });
+    expect(+row.publishedAt).toBe(+real);
+  });
+
+  it("marks 14-day-old unread articles as read", async () => {
+    const feed = await createFeed("https://stale-unread.example/feed", [
+      { guid: "old", publishedAt: new Date(Date.now() - 20 * 86400000) },
+      { guid: "fresh", publishedAt: new Date() },
+    ]);
+    await db.subscription.create({ data: { userId: "alice", feedId: feed.id } });
+    await markStaleUnread(feed.id);
+    const old = feed.articles.find((a) => a.guid === "old")!;
+    const fresh = feed.articles.find((a) => a.guid === "fresh")!;
+    expect((await db.userArticle.findUnique({ where: { userId_articleId: { userId: "alice", articleId: old.id } } }))?.isRead).toBe(true);
+    expect(await db.userArticle.findUnique({ where: { userId_articleId: { userId: "alice", articleId: fresh.id } } })).toBeNull();
+  });
+});
+
 describe("feed health", () => {
   it("flags failing, stale, rarely read and noisy feeds", async () => {
     const day = 86400000;
@@ -528,6 +613,16 @@ describe("semantic search", () => {
     const fake = await startFakeOpenAI({ embed: topic });
     try {
       const provider = await db.aiProvider.create({ data: { userId: null, type: "openai_compatible", name: "emb", baseUrl: fake.baseUrl } });
+      const embeddingConfig = async () => {
+        const row = await db.appSettings.findUnique({ where: { id: "app" } });
+        return { embeddingProviderId: row?.embeddingProviderId ?? null, embeddingModel: row?.embeddingModel ?? null };
+      };
+      const before = await embeddingConfig();
+      expect(await testEmbeddingAction({ providerId: provider.id, model: "fake-embed" })).toEqual({ ok: true, dimensions: 3 });
+      expect(await embeddingConfig()).toEqual(before);
+      const dead = await db.aiProvider.create({ data: { userId: null, type: "openai_compatible", name: "dead", baseUrl: "http://127.0.0.1:9/v1" } });
+      expect((await testEmbeddingAction({ providerId: dead.id, model: "missing" })).ok).toBe(false);
+      expect(await embeddingConfig()).toEqual(before);
       expect(await setEmbeddingConfigAction({ providerId: provider.id, model: "fake-embed" })).toEqual({ ok: true });
 
       const feed = await createFeed("https://semantic.example/feed", [{ guid: "sport" }, { guid: "money" }]);

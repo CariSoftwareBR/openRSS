@@ -1,13 +1,15 @@
 "use client";
 
-import { Loader2, TriangleAlert } from "lucide-react";
+import { Loader2, TriangleAlert, Zap } from "lucide-react";
 import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { setEmbeddingConfigAction } from "@/app/actions/embeddings";
+import { listModelsAction } from "@/app/actions/ai";
+import { setEmbeddingConfigAction, testEmbeddingAction } from "@/app/actions/embeddings";
+import { ModelCombobox } from "@/components/model-combobox";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
-import { Card, Field, Input } from "@/components/ui/input";
+import { Card, Field } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 type Provider = { id: string; name: string; type: string };
@@ -17,6 +19,12 @@ const MODEL_HINT: Record<string, string> = {
   openai_compatible: "nomic-embed-text",
   openrouter: "openai/text-embedding-3-small",
 };
+
+/** Modelos de embedding primeiro; o restante continua disponível para nome personalizado. */
+function embeddingModelsFirst<T extends { id: string }>(models: T[]): T[] {
+  const rank = (id: string) => (/embed/i.test(id) ? 0 : 1);
+  return [...models].sort((a, b) => rank(a.id) - rank(b.id) || a.id.localeCompare(b.id));
+}
 
 /** Admin: provedor e modelo de embeddings da busca semântica. */
 export function SemanticSearchSettings({
@@ -32,7 +40,9 @@ export function SemanticSearchSettings({
   const [providerId, setProviderId] = useState(current.providerId ?? "");
   const [model, setModel] = useState(current.model);
   const [pending, start] = useTransition();
+  const [testing, startTest] = useTransition();
   const selected = providers.find((p) => p.id === providerId);
+  const busy = pending || testing;
 
   function save(enable: boolean) {
     start(async () => {
@@ -43,6 +53,14 @@ export function SemanticSearchSettings({
         setProviderId("");
         setModel("");
       }
+    });
+  }
+
+  function test() {
+    startTest(async () => {
+      const res = await testEmbeddingAction({ providerId, model });
+      if (!res.ok) return void toast.error(res.error);
+      toast.success(t("tested", { dimensions: res.dimensions }));
     });
   }
 
@@ -62,26 +80,35 @@ export function SemanticSearchSettings({
               <Combobox
                 aria-label={t("provider")}
                 value={providerId}
-                onValueChange={(v) => {
-                  setProviderId(v);
-                  const type = providers.find((p) => p.id === v)?.type;
-                  if (!model && type) setModel(MODEL_HINT[type] ?? "");
-                }}
+                onValueChange={setProviderId}
                 placeholder={t("choose")}
                 options={providers.map((p) => ({ value: p.id, label: p.name, description: p.type }))}
               />
             </Field>
             <Field label={t("model")} hint={selected ? t("modelHint", { example: MODEL_HINT[selected.type] ?? "" }) : undefined}>
-              <Input value={model} onChange={(e) => setModel(e.target.value)} placeholder={selected ? MODEL_HINT[selected.type] : ""} />
+              <ModelCombobox
+                value={model}
+                onValueChange={setModel}
+                placeholder={selected ? MODEL_HINT[selected.type] : undefined}
+                cacheKey={providerId || null}
+                unavailableReason={t("choose")}
+                load={async () => {
+                  const res = await listModelsAction(providerId);
+                  return res.ok ? { ok: true, models: embeddingModelsFirst(res.models) } : res;
+                }}
+              />
             </Field>
           </div>
         )}
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="primary" disabled={pending || !providerId || !model.trim()} onClick={() => save(true)}>
+          <Button variant="primary" disabled={busy || !providerId || !model.trim()} onClick={() => save(true)}>
             {pending && <Loader2 className="animate-spin" />} {current.providerId ? t("update") : t("enable")}
           </Button>
+          <Button variant="ghost" disabled={busy || !providerId || !model.trim()} onClick={test}>
+            {testing ? <Loader2 className="animate-spin" /> : <Zap />} {t("test")}
+          </Button>
           {current.providerId && (
-            <Button variant="ghost" disabled={pending} onClick={() => save(false)}>
+            <Button variant="ghost" disabled={busy} onClick={() => save(false)}>
               {t("disable")}
             </Button>
           )}

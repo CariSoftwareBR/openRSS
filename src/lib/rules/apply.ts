@@ -3,6 +3,7 @@ import type { Rule } from "@/generated/prisma/client";
 import { db } from "@/lib/db";
 import { decrypt } from "@/lib/crypto";
 import { serializeError } from "@/lib/localized-error";
+import { INGEST_UNREAD_MAX_AGE_MS } from "@/lib/feeds/unread-age";
 import {
   compileRule,
   needsScore,
@@ -75,7 +76,7 @@ export async function applyRulesToArticles(articleIds: string[], phase: RulePhas
   if (articleIds.length === 0) return;
   const articles = await db.article.findMany({
     where: { id: { in: articleIds } },
-    select: { id: true, feedId: true, title: true, url: true, author: true, contentHtml: true, snippet: true, createdAt: true, feed: { select: { title: true } } },
+    select: { id: true, feedId: true, title: true, url: true, author: true, contentHtml: true, snippet: true, createdAt: true, publishedAt: true, feed: { select: { title: true } } },
   });
   if (articles.length === 0) return;
 
@@ -115,7 +116,9 @@ export async function applyRulesToArticles(articleIds: string[], phase: RulePhas
         entry.actions.forEach((a) => set.add(a));
         byArticle.set(article.id, set);
 
-        const fresh = Date.now() - article.createdAt.getTime() < NOTIFY_MAX_AGE_MS;
+        const fresh =
+          Date.now() - article.createdAt.getTime() < NOTIFY_MAX_AGE_MS &&
+          Date.now() - article.publishedAt.getTime() < INGEST_UNREAD_MAX_AGE_MS;
         if (entry.actions.includes("notify") && fresh && notified < NOTIFY_MAX_PER_RUN) {
           notified++;
           await notify(entry.rule, { id: article.id, title: article.title, url: article.url, feed: article.feed.title, score: candidate.score });

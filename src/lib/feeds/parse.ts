@@ -13,6 +13,9 @@ type CustomItem = {
   "media:group"?: OneOrMany<{ "media:thumbnail"?: OneOrMany<MediaNode>; "media:content"?: OneOrMany<MediaNode> }>;
   enclosure?: { url?: string; type?: string };
   id?: string;
+  date?: string;
+  published?: string;
+  updated?: string;
 };
 
 const parser = new Parser<Record<string, unknown>, CustomItem>({
@@ -23,11 +26,16 @@ const parser = new Parser<Record<string, unknown>, CustomItem>({
       ["media:thumbnail", "media:thumbnail"],
       ["media:group", "media:group"],
       ["id", "id"],
+      ["published", "published"],
+      ["updated", "updated"],
     ],
   },
 });
 
 const first = <T,>(value: OneOrMany<T> | undefined): T | undefined => (Array.isArray(value) ? value[0] : value);
+
+const DAY_MS = 86400000;
+const TRACKING_PARAM = /^(utm_|fbclid|gclid|gclsrc|mc_|yclid|igshid|spm$|ref$|ref_src|ncid|cmpid|s_cid|mkt_tok|vero_id|oly_|__hs|msclkid|_hs)/i;
 
 /** URL de imagem em media:content (se for imagem) ou media:thumbnail. */
 function mediaImage(content?: OneOrMany<MediaNode>, thumbnail?: OneOrMany<MediaNode>): string | undefined {
@@ -45,6 +53,8 @@ export type ParsedArticle = {
   snippet: string | null;
   imageUrl: string | null;
   publishedAt: Date;
+  /** false: o XML não tinha data; `publishedAt` é a hora da coleta. */
+  hasPublishDate: boolean;
 };
 
 export type ParsedFeed = {
@@ -87,29 +97,31 @@ export async function parseFeed(xml: string, feedUrl: string): Promise<ParsedFee
   const siteUrl = feed.link ? safeUrl(feed.link, feedUrl) : null;
 
   const items = feed.items.slice(0, 200).map((item): ParsedArticle => {
-    const link = item.link ? safeUrl(item.link, siteUrl ?? feedUrl) : null;
+    const rawLink = item.link ? safeUrl(item.link, siteUrl ?? feedUrl) : null;
+    const link = rawLink ? (canonicalizeUrl(rawLink) ?? rawLink) : null;
     const rawHtml = item["content:encoded"] ?? item.content ?? item.summary ?? "";
     const contentHtml = rawHtml ? sanitizeArticleHtml(rawHtml, link ?? siteUrl ?? feedUrl) : null;
     const text = stripHtml(rawHtml || item.contentSnippet || "");
-    const date = item.isoDate ?? item.pubDate;
-    const publishedAt = date && !Number.isNaN(Date.parse(date)) ? new Date(date) : new Date();
+    const { publishedAt, hasPublishDate } = resolvePublishedAt(item, link);
     const group = first(item["media:group"]);
     const imageUrl =
       mediaImage(item["media:content"], item["media:thumbnail"]) ??
       mediaImage(group?.["media:content"], group?.["media:thumbnail"]) ??
       (item.enclosure?.type?.startsWith("image/") ? item.enclosure.url : null) ??
       firstImage(contentHtml);
+    const dateKey = hasPublishDate ? publishedAt.toISOString() : "";
 
     return {
       // Sem guid/id/link: o conteúdo entra no hash para itens sem título nem data não colidirem entre si.
-      guid: item.guid ?? item.id ?? link ?? createHash("sha1").update(`${item.title}|${date}|${rawHtml || item.contentSnippet || ""}`).digest("hex"),
+      guid: itemGuid(item.guid ?? item.id, link, `${item.title ?? ""}|${dateKey}|${rawHtml || item.contentSnippet || ""}`),
       url: link,
       title: (item.title && stripHtml(item.title)) || truncate(text, 80) || "(sem título)",
       author: item.creator ?? (item as { author?: string }).author ?? null,
       contentHtml,
       snippet: text ? truncate(text, 280) : null,
       imageUrl: imageUrl ?? null,
-      publishedAt: publishedAt > new Date(Date.now() + 86400000) ? new Date() : publishedAt,
+      publishedAt,
+      hasPublishDate,
     };
   });
 
@@ -125,6 +137,79 @@ export async function parseFeed(xml: string, feedUrl: string): Promise<ParsedFee
 export function faviconFor(siteUrl: string): string | null {
   try {
     return new URL("/favicon.ico", siteUrl).toString();
+  } catch {
+    return null;
+  }
+}
+
+export function parseArticleDate(value: string | undefined | null): Date | null {
+  if (!value) return null;
+  const text = value.trim();
+  if (!text) return null;
+  // dd/MM/yyyy antes do Date.parse nativo, que lê 03/09 como 9 de março.
+  const br = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?/.exec(text);
+  if (br) {
+    const date = new Date(Date.UTC(+br[3], +br[2] - 1, +br[1], +(br[4] ?? 12), +(br[5] ?? 0), +(br[6] ?? 0)));
+    return Number.isNaN(+date) ? null : date;
+  }
+  const native = Date.parse(text);
+  if (!Number.isNaN(native)) return new Date(native);
+  if (/^\d{10,13}$/.test(text)) {
+    const n = Number(text);
+    const date = new Date(text.length <= 10 ? n * 1000 : n);
+    return Number.isNaN(+date) ? null : date;
+  }
+  return null;
+}
+
+export function dateFromUrl(url: string | null): Date | null {
+  if (!url) return null;
+  const m = url.match(/\/(20\d{2})[/-](\d{1,2})[/-](\d{1,2})(?:\/|$|\?|#)/);
+  if (!m) return null;
+  const month = +m[2];
+  const day = +m[3];
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return new Date(Date.UTC(+m[1], month - 1, day, 12));
+}
+
+function resolvePublishedAt(item: CustomItem & { isoDate?: string; pubDate?: string }, link: string | null) {
+  const fromFeed =
+    parseArticleDate(item.published) ?? parseArticleDate(item.pubDate) ?? parseArticleDate(item.date) ?? parseArticleDate(item.isoDate);
+  const fromUrl = dateFromUrl(link);
+  const fromUpdated = parseArticleDate(item.updated);
+  let resolved = fromFeed ?? fromUrl ?? fromUpdated;
+  // Site bumpou <updated>/pubDate para hoje, mas a URL ainda tem a data real da matéria.
+  if (resolved && fromUrl && resolved.getTime() - fromUrl.getTime() > 2 * DAY_MS) resolved = fromUrl;
+  if (!resolved) return { publishedAt: new Date(), hasPublishDate: false };
+  return {
+    publishedAt: resolved.getTime() > Date.now() + DAY_MS ? new Date() : resolved,
+    hasPublishDate: true,
+  };
+}
+
+function itemGuid(raw: unknown, link: string | null, fallback: string): string {
+  const value = asText(raw) ?? link;
+  if (!value) return createHash("sha1").update(fallback).digest("hex");
+  if (/^https?:\/\//i.test(value)) return canonicalizeUrl(value) ?? value;
+  return value;
+}
+
+function asText(value: unknown): string | null {
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (typeof value === "number") return String(value);
+  return null;
+}
+
+function canonicalizeUrl(raw: string): string | null {
+  try {
+    const url = new URL(raw);
+    url.hash = "";
+    if (url.protocol === "http:" || url.protocol === "https:") {
+      for (const key of [...url.searchParams.keys()]) {
+        if (TRACKING_PARAM.test(key)) url.searchParams.delete(key);
+      }
+    }
+    return url.toString();
   } catch {
     return null;
   }

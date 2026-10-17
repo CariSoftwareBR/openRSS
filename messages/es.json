@@ -985,6 +985,8 @@
     "choose": "Elige…",
     "enable": "Activar",
     "update": "Guardar",
+    "test": "Probar",
+    "tested": "Funcionó — vector de {dimensions} dimensiones.",
     "disable": "Desactivar",
     "enabled": "Búsqueda semántica activada. La indexación empezó.",
     "disabled": "Búsqueda semántica desactivada.",

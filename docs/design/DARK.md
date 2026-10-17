@@ -65,6 +65,7 @@ typography:
     lineHeight: 20px
 rounded:
   none: 0px
+  button: 4px
   sm: 8px
   pill: 9999px
 spacing:
@@ -80,13 +81,13 @@ components:
   button-primary:
     backgroundColor: "{colors.primary}"
     textColor: "{colors.on-primary}"
-    rounded: "{rounded.pill}"
+    rounded: "{rounded.button}"
     padding: "{spacing.xs} {spacing.md}"
   button-outline:
     backgroundColor: "transparent"
     textColor: "{colors.ink}"
     borderColor: "{colors.outline}"
-    rounded: "{rounded.pill}"
+    rounded: "{rounded.button}"
     padding: "{spacing.xs} {spacing.md}"
   text-input:
     backgroundColor: "{colors.canvas-soft}"
@@ -120,7 +121,7 @@ O tema Dark é um canvas quase preto (`#0a0a0a`) de ponta a ponta, contornos hai
 
 **Key Characteristics:**
 - Canvas único quase preto; cartões e painéis em `canvas-card` com borda hairline.
-- Botões em pílula (`9999px`) com borda branca translúcida; o único botão preenchido (branco) é a ação primária da tela.
+- Botões com canto de `4px` e borda branca translúcida; o único botão preenchido (branco) é a ação primária da tela.
 - Rótulos de seção, metadados e contadores em Geist Mono caixa alta com tracking positivo.
 - Sem sombras: elevação apenas por borda e mudança tonal.
 - Paleta de acentos (laranja, roxo, violeta, azul) usada com parcimônia: cores de pastas, badges de prioridade da IA, ícones.
@@ -167,13 +168,14 @@ O tema Dark é um canvas quase preto (`#0a0a0a`) de ponta a ponta, contornos hai
 Nenhuma sombra.
 
 ## Shapes
+- `4px` para botões.
 - `8px` para cartões, inputs e linhas selecionadas.
-- `9999px` para todo botão e chip.
+- `9999px` para chips.
 
 ## Components
 
-- **Button primary:** pílula branca com texto `#0a0a0a`; uma por tela.
-- **Button outline:** pílula transparente, borda `outline`, hover `outline-hover`.
+- **Button primary:** canto de `4px`, fundo branco, texto `#0a0a0a`; uma por tela.
+- **Button outline:** canto de `4px`, transparente, borda `outline`, hover `outline-hover`.
 - **Input:** `canvas-soft`, borda hairline, foco com borda `outline-hover`.
 - **Card / Reader:** `canvas-card`, borda hairline, raio 8px.
 - **Sidebar row:** transparente; ativo em `canvas-soft` com indicador branco de 2px à esquerda.
@@ -183,7 +185,7 @@ Nenhuma sombra.
 
 ### Do
 - Manter o canvas `#0a0a0a` como única superfície de página.
-- Usar pílulas em todo elemento interativo.
+- Botões com canto de `4px`; pílulas só em chips.
 - Combinar Geist (sentence case) com Geist Mono UPPERCASE nos rótulos.
 - Bordas translúcidas nos botões outline.
 

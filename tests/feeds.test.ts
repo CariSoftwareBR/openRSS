@@ -55,6 +55,49 @@ describe("parseFeed", () => {
     const feed = await parseFeed(atom, "https://atom.test/feed");
     expect(feed.items[0]).toMatchObject({ guid: "tag:1", title: "A1", url: "https://atom.test/1" });
   });
+
+  it("lê pubDate em dd/MM/yyyy", async () => {
+    const xml = `<?xml version="1.0"?><rss version="2.0"><channel><title>T</title>
+      <item><title>BR</title><link>https://br.test/p</link><guid>br-1</guid>
+      <pubDate>03/09/2026 10:00:00</pubDate></item>
+    </channel></rss>`;
+    const feed = await parseFeed(xml, "https://br.test/feed");
+    expect(feed.items[0]).toMatchObject({ hasPublishDate: true });
+    expect(feed.items[0].publishedAt.toISOString()).toBe("2026-09-03T10:00:00.000Z");
+  });
+
+  it("usa a data da URL quando o feed só bumpa pubDate", async () => {
+    const xml = `<?xml version="1.0"?><rss version="2.0"><channel><title>T</title>
+      <item>
+        <title>Velha</title>
+        <link>https://g1.example/2026/09/01/noticia.html?utm_source=rss</link>
+        <guid>https://g1.example/2026/09/01/noticia.html?utm_source=rss</guid>
+        <pubDate>Sat, 17 Oct 2026 12:00:00 GMT</pubDate>
+      </item>
+    </channel></rss>`;
+    const feed = await parseFeed(xml, "https://g1.example/feed");
+    expect(feed.items[0].publishedAt.toISOString()).toBe("2026-09-01T12:00:00.000Z");
+    expect(feed.items[0].guid).toBe("https://g1.example/2026/09/01/noticia.html");
+    expect(feed.items[0].url).toBe("https://g1.example/2026/09/01/noticia.html");
+  });
+
+  it("prefere Atom published a updated", async () => {
+    const xml = `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><title>Atom</title>
+      <entry><id>tag:2</id><title>A2</title><link href="https://atom.test/2"/>
+      <published>2026-09-01T00:00:00Z</published>
+      <updated>2026-10-17T00:00:00Z</updated>
+      </entry></feed>`;
+    const feed = await parseFeed(xml, "https://atom.test/feed");
+    expect(feed.items[0].publishedAt.toISOString()).toBe("2026-09-01T00:00:00.000Z");
+  });
+
+  it("marca item sem data como hasPublishDate false", async () => {
+    const xml = `<?xml version="1.0"?><rss version="2.0"><channel><title>T</title>
+      <item><title>X</title><link>https://nodate.test/p</link><guid>x</guid></item>
+    </channel></rss>`;
+    const feed = await parseFeed(xml, "https://nodate.test/feed");
+    expect(feed.items[0].hasPublishDate).toBe(false);
+  });
 });
 
 describe("sanitizeArticleHtml", () => {
@@ -81,6 +124,16 @@ describe("parseFeed guid", () => {
     </channel></rss>`;
     const feed = await parseFeed(xml, "https://noguid.test/feed");
     expect(new Set(feed.items.map((i) => i.guid)).size).toBe(2);
+  });
+
+  it("é o mesmo artigo com ou sem utm na URL", async () => {
+    const xml = (guid: string) => `<?xml version="1.0"?><rss version="2.0"><channel><title>T</title>
+      <item><title>A</title><guid>${guid}</guid><link>${guid}</link></item>
+    </channel></rss>`;
+    const withUtm = await parseFeed(xml("https://site.test/a?utm_source=rss&amp;fbclid=1"), "https://site.test/feed");
+    const clean = await parseFeed(xml("https://site.test/a"), "https://site.test/feed");
+    expect(withUtm.items[0].guid).toBe(clean.items[0].guid);
+    expect(withUtm.items[0].guid).toBe("https://site.test/a");
   });
 });
 

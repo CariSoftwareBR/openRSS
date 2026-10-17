@@ -1,11 +1,15 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { setArticleStates } from "@/lib/article-state";
 import { getAppSettings } from "@/lib/app-settings";
 import { withLock } from "@/lib/jobs/lock";
 import { LocalizedError, serializeError } from "@/lib/localized-error";
 import { safeFetch } from "./net";
 import { parseFeed, type ParsedFeed } from "./parse";
 import { assignStories } from "./stories";
+import { INGEST_UNREAD_MAX_AGE_MS, SUBSCRIBE_UNREAD_MAX_AGE_MS } from "./unread-age";
+
+export { INGEST_UNREAD_MAX_AGE_MS, SUBSCRIBE_UNREAD_MAX_AGE_MS } from "./unread-age";
 
 const MAX_BACKOFF_MIN = 24 * 60;
 
@@ -22,17 +26,62 @@ export async function ingestItems(feedId: string, items: ParsedFeed["items"]): P
   const unique = [...new Map(items.map((i) => [i.guid, i])).values()];
   const created: string[] = [];
   for (const item of unique) {
+    const { hasPublishDate: _hasDate, ...data } = item;
     try {
       // O ref dá ao artigo um id numérico crescente, usado pelas APIs Fever e Google Reader.
-      const article = await db.article.create({ data: { feedId, ...item, ref: { create: {} } }, select: { id: true } });
+      const article = await db.article.create({ data: { feedId, ...data, ref: { create: {} } }, select: { id: true } });
       created.push(article.id);
     } catch (error) {
       if (!isUniqueConflict(error)) throw error;
+      // Data do XML mais antiga que a gravada (fallback "agora" ou <updated> bumpado): corrige, nunca adianta.
+      await db.article.updateMany({
+        where: { feedId, guid: item.guid, publishedAt: { gt: item.publishedAt } },
+        data: { publishedAt: item.publishedAt },
+      });
     }
   }
   // Agrupar é acessório: uma falha aqui não pode perder os artigos já gravados.
   await assignStories(created).catch((err) => console.error("[stories]", err));
   return created;
+}
+
+/** Marca como lidos, para todos os assinantes, artigos deste feed publicados há mais de 14 dias. */
+export async function markStaleUnread(feedId: string) {
+  const cutoff = new Date(Date.now() - INGEST_UNREAD_MAX_AGE_MS);
+  const subs = await db.subscription.findMany({ where: { feedId }, select: { userId: true } });
+  if (subs.length === 0) return;
+  for (const { userId } of subs) {
+    const unread = await db.article.findMany({
+      where: { feedId, publishedAt: { lt: cutoff }, NOT: { states: { some: { userId, isRead: true } } } },
+      select: { id: true },
+      take: 500,
+    });
+    if (unread.length) await setArticleStates(userId, unread.map((a) => a.id), { isRead: true });
+  }
+}
+
+async function markSubscribeBacklog(userId: string, feedId: string, items: ParsedFeed["items"]) {
+  const cutoff = new Date(Date.now() - SUBSCRIBE_UNREAD_MAX_AGE_MS);
+  const undatedGuids = items.filter((i) => !i.hasPublishDate).map((i) => i.guid);
+  const rows = await db.article.findMany({
+    where: {
+      feedId,
+      OR: [{ publishedAt: { lt: cutoff } }, ...(undatedGuids.length ? [{ guid: { in: undatedGuids } }] : [])],
+    },
+    select: { id: true },
+  });
+  if (rows.length) await setArticleStates(userId, rows.map((r) => r.id), { isRead: true });
+}
+
+async function freshCreatedIds(createdIds: string[]): Promise<string[]> {
+  if (createdIds.length === 0) return createdIds;
+  const cutoff = new Date(Date.now() - INGEST_UNREAD_MAX_AGE_MS);
+  const rows = await db.article.findMany({
+    where: { id: { in: createdIds }, publishedAt: { gte: cutoff } },
+    select: { id: true },
+  });
+  const fresh = new Set(rows.map((r) => r.id));
+  return createdIds.filter((id) => fresh.has(id));
 }
 
 async function refreshFeedUnlocked(feedId: string): Promise<RefreshResult> {
@@ -54,11 +103,14 @@ async function refreshFeedUnlocked(feedId: string): Promise<RefreshResult> {
         where: { id: feedId },
         data: { lastFetchedAt: new Date(), nextFetchAt: next, errorCount: 0, lastError: null },
       });
+      await markStaleUnread(feedId);
       return { newArticleIds: [] };
     }
 
     const parsed = await parseFeed(res.body, res.url);
-    const newArticleIds = await ingestItems(feedId, parsed.items);
+    const createdIds = await ingestItems(feedId, parsed.items);
+    await markStaleUnread(feedId);
+    const newArticleIds = await freshCreatedIds(createdIds);
     await db.feed.update({
       where: { id: feedId },
       data: {
@@ -163,6 +215,7 @@ export async function subscribe(
     return tx.subscription.findUniqueOrThrow({ where: { id: sub.id }, include: { feed: true } });
   });
   if (parsed) await ingestItems(subscription.feedId, parsed.items);
+  await markSubscribeBacklog(userId, subscription.feedId, parsed?.items ?? []);
   return subscription;
 }
 
