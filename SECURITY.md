@@ -8,7 +8,7 @@ openRSS is a rolling-release project — only the latest commit on `main` (and t
 
 Please **do not** open a public issue for security vulnerabilities.
 
-Report privately using [GitHub Security Advisories](https://github.com/paulocarinhena/openRSS/security/advisories/new) for this repository. You'll get an initial response within a few days, and we'll coordinate a fix and disclosure timeline with you.
+Report privately using [GitHub Security Advisories](https://github.com/CariSoftwareBR/openRSS/security/advisories/new) for this repository. You'll get an initial response within a few days, and we'll coordinate a fix and disclosure timeline with you.
 
 ## Scope
 

@@ -391,7 +391,7 @@ function SidebarContent({ sidebar, user, onClose }: { sidebar: SidebarData; user
           <p className="truncate text-[0.6875rem] text-muted-foreground">{user.email}</p>
         </div>
         <Button asChild variant="ghost" size="icon-sm" aria-label={t("viewSourceOnGithub")} title={t("viewSourceOnGithub")}>
-          <a href="https://github.com/paulocarinhena/openRSS" target="_blank" rel="noopener noreferrer">
+          <a href="https://github.com/CariSoftwareBR/openRSS" target="_blank" rel="noopener noreferrer">
             <GithubIcon />
           </a>
         </Button>
