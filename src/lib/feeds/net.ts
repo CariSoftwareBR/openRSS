@@ -2,7 +2,7 @@ import "server-only";
 import { pinnedFetch } from "@/lib/network";
 import { LocalizedError, type ServerErrorKey } from "@/lib/localized-error";
 
-export const USER_AGENT = "openRSS/0.1 (+https://github.com/paulocarinhena/openRSS; feed reader)";
+export const USER_AGENT = "openRSS/0.1 (+https://github.com/CariSoftwareBR/openRSS; feed reader)";
 
 export class FetchError extends LocalizedError {
   constructor(key: ServerErrorKey, params: Record<string, string | number> = {}, readonly status?: number) {

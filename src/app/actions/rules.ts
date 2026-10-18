@@ -225,7 +225,7 @@ export async function testWebhookAction(input: { ruleId?: string; webhookUrl?: s
   try {
     await sendWebhook(url, format.data, {
       rule: labels("testRuleName"),
-      article: { id: "test", title: labels("testArticleTitle"), url: "https://github.com/paulocarinhena/openRSS", feed: "openRSS", score: 90 },
+      article: { id: "test", title: labels("testArticleTitle"), url: "https://github.com/CariSoftwareBR/openRSS", feed: "openRSS", score: 90 },
     });
     return { ok: true as const };
   } catch (err) {

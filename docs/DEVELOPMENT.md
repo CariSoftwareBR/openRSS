@@ -10,7 +10,7 @@ Documentação técnica para contribuir, operar em produção e trabalhar com o 
 ## Setup local
 
 ```bash
-git clone https://github.com/paulocarinhena/openRSS.git
+git clone https://github.com/CariSoftwareBR/openRSS.git
 cd openRSS
 cp .env.example .env
 npm ci

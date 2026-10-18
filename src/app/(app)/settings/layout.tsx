@@ -16,7 +16,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-2xl font-semibold tracking-tight dark:font-normal">{t("title")}</h1>
           <a
-            href="https://github.com/paulocarinhena/openRSS"
+            href="https://github.com/CariSoftwareBR/openRSS"
             target="_blank"
             rel="noopener noreferrer"
             className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"

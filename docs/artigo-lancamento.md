@@ -2,7 +2,7 @@ Lancei o openRSS — um leitor de RSS self-hosted com IA integrada
 
 Depois de meses usando (e me frustrando com) leitores de feed genéricos, decidi construir o meu. O resultado é o openRSS: um leitor de RSS open source, rápido e com IA integrada no fluxo de leitura, não como um recurso isolado colado por cima.
 
-Repositório: https://github.com/paulocarinhena/openRSS
+Repositório: https://github.com/CariSoftwareBR/openRSS
 
 Por que mais um leitor de RSS?
 
@@ -36,7 +36,7 @@ Stack: Next.js 16, React 19, TypeScript, Tailwind CSS 4, Prisma 7, Better Auth, 
 
 Instalação (Docker):
 
-git clone https://github.com/paulocarinhena/openRSS.git
+git clone https://github.com/CariSoftwareBR/openRSS.git
 cd openRSS
 docker compose up -d --build
 

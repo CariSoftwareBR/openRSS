@@ -7,7 +7,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License"></a>
-  <a href="https://github.com/paulocarinhena/openRSS/pkgs/container/openrss"><img src="https://img.shields.io/badge/GHCR-ghcr.io%2Fpaulocarinhena%2Fopenrss-2496ED?logo=docker&logoColor=white" alt="GHCR"></a>
+  <a href="https://github.com/CariSoftwareBR/openRSS/pkgs/container/openrss"><img src="https://img.shields.io/badge/GHCR-ghcr.io%2Fcarisoftwarebr%2Fopenrss-2496ED?logo=docker&logoColor=white" alt="GHCR"></a>
   <img src="https://img.shields.io/badge/node-%3E%3D22.12-339933?logo=node.js&logoColor=white" alt="Node.js">
   <img src="https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white" alt="Docker Compose">
 </p>
@@ -100,7 +100,7 @@ Configure em Configurações → IA → Adicionar. Use Testar para validar a con
 #### Método A — Docker + SQLite (recomendado)
 
 ```bash
-git clone https://github.com/paulocarinhena/openRSS.git
+git clone https://github.com/CariSoftwareBR/openRSS.git
 cd openRSS
 docker compose up -d --build
 ```
@@ -127,7 +127,7 @@ Para instâncias com mais usuários. O assistente `/setup` é pulado porque `DAT
 Linux / macOS:
 
 ```bash
-git clone https://github.com/paulocarinhena/openRSS.git
+git clone https://github.com/CariSoftwareBR/openRSS.git
 cd openRSS
 export POSTGRES_PASSWORD=$(openssl rand -hex 32)
 docker compose -f docker-compose.postgres.yml up -d --build
@@ -137,7 +137,7 @@ curl -sf http://localhost:8285/api/health
 Windows (PowerShell):
 
 ```powershell
-git clone https://github.com/paulocarinhena/openRSS.git
+git clone https://github.com/CariSoftwareBR/openRSS.git
 cd openRSS
 $env:POSTGRES_PASSWORD = -join ((48..57 + 65..70) | Get-Random -Count 64 | ForEach-Object { [char]$_ })
 docker compose -f docker-compose.postgres.yml up -d --build
@@ -153,15 +153,15 @@ Depois crie o admin em http://localhost:8285/register.
 O repositório ainda é necessário para os arquivos `docker-compose*.yml`. A imagem publicada fica em:
 
 ```
-ghcr.io/paulocarinhena/openrss:latest
+ghcr.io/carisoftwarebr/openrss:latest
 ```
 
-Para usar a imagem publicada em vez de build local, substitua `build: .` por `image: ghcr.io/paulocarinhena/openrss:latest` no serviço `openrss` do compose. Em produção, prefira a tag imutável `sha-<commit completo>`.
+Para usar a imagem publicada em vez de build local, substitua `build: .` por `image: ghcr.io/carisoftwarebr/openrss:latest` no serviço `openrss` do compose. Em produção, prefira a tag imutável `sha-<commit completo>`.
 
 #### Método D — Desenvolvimento local
 
 ```bash
-git clone https://github.com/paulocarinhena/openRSS.git
+git clone https://github.com/CariSoftwareBR/openRSS.git
 cd openRSS
 cp .env.example .env
 npm ci
@@ -304,7 +304,7 @@ Configure at Settings → AI → Add. Use Test to validate the connection before
 #### Method A — Docker + SQLite (recommended)
 
 ```bash
-git clone https://github.com/paulocarinhena/openRSS.git
+git clone https://github.com/CariSoftwareBR/openRSS.git
 cd openRSS
 docker compose up -d --build
 ```
@@ -331,7 +331,7 @@ For larger instances. The `/setup` wizard is skipped because `DATABASE_URL` is p
 Linux / macOS:
 
 ```bash
-git clone https://github.com/paulocarinhena/openRSS.git
+git clone https://github.com/CariSoftwareBR/openRSS.git
 cd openRSS
 export POSTGRES_PASSWORD=$(openssl rand -hex 32)
 docker compose -f docker-compose.postgres.yml up -d --build
@@ -341,7 +341,7 @@ curl -sf http://localhost:8285/api/health
 Windows (PowerShell):
 
 ```powershell
-git clone https://github.com/paulocarinhena/openRSS.git
+git clone https://github.com/CariSoftwareBR/openRSS.git
 cd openRSS
 $env:POSTGRES_PASSWORD = -join ((48..57 + 65..70) | Get-Random -Count 64 | ForEach-Object { [char]$_ })
 docker compose -f docker-compose.postgres.yml up -d --build
@@ -357,15 +357,15 @@ Then create the admin at http://localhost:8285/register.
 You still need the repository for `docker-compose*.yml` files. Published image:
 
 ```
-ghcr.io/paulocarinhena/openrss:latest
+ghcr.io/carisoftwarebr/openrss:latest
 ```
 
-To use the published image instead of a local build, replace `build: .` with `image: ghcr.io/paulocarinhena/openrss:latest` in the `openrss` service. In production, prefer the immutable `sha-<full commit>` tag.
+To use the published image instead of a local build, replace `build: .` with `image: ghcr.io/carisoftwarebr/openrss:latest` in the `openrss` service. In production, prefer the immutable `sha-<full commit>` tag.
 
 #### Method D — Local development
 
 ```bash
-git clone https://github.com/paulocarinhena/openRSS.git
+git clone https://github.com/CariSoftwareBR/openRSS.git
 cd openRSS
 cp .env.example .env
 npm ci
@@ -508,7 +508,7 @@ Configura en Configuración → IA → Añadir. Usa Probar para validar la conex
 #### Método A — Docker + SQLite (recomendado)
 
 ```bash
-git clone https://github.com/paulocarinhena/openRSS.git
+git clone https://github.com/CariSoftwareBR/openRSS.git
 cd openRSS
 docker compose up -d --build
 ```
@@ -535,7 +535,7 @@ Para instancias más grandes. El asistente `/setup` se omite porque `DATABASE_UR
 Linux / macOS:
 
 ```bash
-git clone https://github.com/paulocarinhena/openRSS.git
+git clone https://github.com/CariSoftwareBR/openRSS.git
 cd openRSS
 export POSTGRES_PASSWORD=$(openssl rand -hex 32)
 docker compose -f docker-compose.postgres.yml up -d --build
@@ -545,7 +545,7 @@ curl -sf http://localhost:8285/api/health
 Windows (PowerShell):
 
 ```powershell
-git clone https://github.com/paulocarinhena/openRSS.git
+git clone https://github.com/CariSoftwareBR/openRSS.git
 cd openRSS
 $env:POSTGRES_PASSWORD = -join ((48..57 + 65..70) | Get-Random -Count 64 | ForEach-Object { [char]$_ })
 docker compose -f docker-compose.postgres.yml up -d --build
@@ -561,15 +561,15 @@ Después crea el admin en http://localhost:8285/register.
 El repositorio sigue siendo necesario para los archivos `docker-compose*.yml`. Imagen publicada:
 
 ```
-ghcr.io/paulocarinhena/openrss:latest
+ghcr.io/carisoftwarebr/openrss:latest
 ```
 
-Para usar la imagen publicada en lugar de build local, reemplaza `build: .` por `image: ghcr.io/paulocarinhena/openrss:latest` en el servicio `openrss`. En producción, prefiere la etiqueta inmutable `sha-<commit completo>`.
+Para usar la imagen publicada en lugar de build local, reemplaza `build: .` por `image: ghcr.io/carisoftwarebr/openrss:latest` en el servicio `openrss`. En producción, prefiere la etiqueta inmutable `sha-<commit completo>`.
 
 #### Método D — Desarrollo local
 
 ```bash
-git clone https://github.com/paulocarinhena/openRSS.git
+git clone https://github.com/CariSoftwareBR/openRSS.git
 cd openRSS
 cp .env.example .env
 npm ci
