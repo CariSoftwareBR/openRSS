@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1
 
-ARG NODE_IMAGE=node:22.20.0-bookworm-slim
+# Tag flutuante: cada build usa o patch mais recente do Node 22 (correções de segurança incluídas).
+# Para fixar uma versão: --build-arg NODE_IMAGE=node:22.x.y-bookworm-slim
+ARG NODE_IMAGE=node:22-bookworm-slim
 FROM ${NODE_IMAGE} AS base
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -30,7 +32,8 @@ ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0 \
     OPENRSS_DATA_DIR=/data
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/* \
+# upgrade aplica patches de segurança do Debian publicados depois da imagem base.
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /data && chown node:node /data
 
 COPY --from=builder --chown=node:node /app/package.json /app/next.config.ts /app/prisma.config.ts ./

@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+  # Reconstrói semanalmente para a imagem publicada receber patches do Node/Debian mesmo sem commits.
+  schedule:
+    - cron: "0 6 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -32,6 +35,8 @@ jobs:
       - uses: docker/build-push-action@v7
         with:
           context: .
+          pull: true
+          no-cache: ${{ github.event_name == 'schedule' }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

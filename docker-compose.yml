@@ -3,7 +3,10 @@
 #   docker compose up -d --build
 services:
   openrss:
-    build: .
+    build:
+      context: .
+      # Baixa a imagem base mais recente a cada build (patches de segurança do Node/Debian).
+      pull: true
     image: openrss:${OPENRSS_IMAGE_TAG:-local}
     restart: unless-stopped
     ports:
