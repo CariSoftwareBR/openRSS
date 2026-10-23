@@ -3,7 +3,9 @@
 #   POSTGRES_PASSWORD=$(openssl rand -hex 32) docker compose -f docker-compose.postgres.yml up -d --build
 services:
   postgres:
-    image: postgres:17.6-alpine
+    # Tag flutuante: recebe as correções do PostgreSQL 17 sem mudar de versão principal.
+    image: postgres:17-alpine
+    pull_policy: always
     restart: unless-stopped
     environment:
       POSTGRES_USER: openrss
@@ -18,7 +20,10 @@ services:
       retries: 10
 
   openrss:
-    build: .
+    build:
+      context: .
+      # Baixa a imagem base mais recente a cada build (patches de segurança do Node/Debian).
+      pull: true
     image: openrss:${OPENRSS_IMAGE_TAG:-local}
     restart: unless-stopped
     depends_on:
