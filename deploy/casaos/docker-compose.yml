@@ -64,7 +64,7 @@ x-casaos:
     - amd64
     - arm64
   version: "0.1.1"
-  update_at: "TODO"
+  update_at: "2026-10-24"
   release_notes:
     en_US: First release in the app store.
   website: https://github.com/CariSoftwareBR/openRSS
