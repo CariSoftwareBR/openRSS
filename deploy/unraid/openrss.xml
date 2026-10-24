@@ -1,0 +1,42 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>openRSS</Name>
+  <Repository>ghcr.io/carisoftwarebr/openrss:latest</Repository>
+  <Registry>https://github.com/CariSoftwareBR/openRSS/pkgs/container/openrss</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/CariSoftwareBR/openRSS/issues</Support>
+  <Project>https://github.com/CariSoftwareBR/openRSS</Project>
+  <Overview>A quiet, self-hosted RSS reader with AI that works for you. openRSS groups duplicate stories, scores each article from 0 to 100 by your interests, summarizes, translates and builds a daily digest, using OpenAI, Anthropic, OpenRouter or a local model through Ollama. Also: OPML import/export, automatic rules with ntfy/Discord/Slack/Telegram notifications, OIDC single sign-on, and the Google Reader and Fever APIs for NetNewsWire, Reeder, ReadYou and other apps.[br][br]After install, open the WebUI and create your account: the first account becomes the administrator.</Overview>
+  <Category>Productivity: Tools:</Category>
+  <WebUI>http://[IP]:[PORT:3000]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/CariSoftwareBR/openRSS/main/deploy/unraid/openrss.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/CariSoftwareBR/openRSS/main/public/icons/icon-512.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText>Buy me a coffee</DonateText>
+  <DonateLink>https://buymeacoffee.com/pcarinhena</DonateLink>
+  <Requires/>
+  <Config Name="WebUI port" Target="3000" Default="8285" Mode="tcp" Description="Port for the web interface." Type="Port" Display="always" Required="true" Mask="false">8285</Config>
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/openrss" Mode="rw" Description="Config, secret and the SQLite database." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/openrss</Config>
+  <Config Name="Database URL" Target="DATABASE_URL" Default="file:/data/openrss.db" Mode="" Description="SQLite in the data folder (up to ~5 concurrent users). For PostgreSQL: postgresql://user:password@host:5432/openrss" Type="Variable" Display="always" Required="true" Mask="false">file:/data/openrss.db</Config>
+  <Config Name="Public URL" Target="BETTER_AUTH_URL" Default="" Mode="" Description="Only behind a reverse proxy or for single sign-on: the address users open, e.g. https://rss.example.com. Leave empty to accept the address in the browser." Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User ID that owns the data folder." Type="Variable" Display="advanced" Required="true" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group ID that owns the data folder." Type="Variable" Display="advanced" Required="true" Mask="false">100</Config>
+  <Config Name="Allow private feeds" Target="ALLOW_PRIVATE_FEEDS" Default="false|true" Mode="" Description="Allow feeds on your local network (e.g. other containers)." Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
+  <Config Name="Allow private webhooks" Target="ALLOW_PRIVATE_WEBHOOKS" Default="false|true" Mode="" Description="Allow rule notifications to local addresses (e.g. a self-hosted ntfy)." Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
+  <Config Name="SMTP host" Target="SMTP_HOST" Default="" Mode="" Description="Optional: e-mail for password reset and the daily digest." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="SMTP port" Target="SMTP_PORT" Default="" Mode="" Description="e.g. 587" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="SMTP secure" Target="SMTP_SECURE" Default="" Mode="" Description="true for implicit TLS (port 465)." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="SMTP user" Target="SMTP_USER" Default="" Mode="" Description="" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="SMTP password" Target="SMTP_PASSWORD" Default="" Mode="" Description="" Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="SMTP from" Target="SMTP_FROM" Default="" Mode="" Description="e.g. openRSS &lt;rss@example.com&gt;" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="OIDC issuer" Target="OIDC_ISSUER" Default="" Mode="" Description="Optional single sign-on (Authentik, Authelia, Keycloak). Requires Public URL." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="OIDC client ID" Target="OIDC_CLIENT_ID" Default="" Mode="" Description="" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="OIDC client secret" Target="OIDC_CLIENT_SECRET" Default="" Mode="" Description="" Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="OIDC provider name" Target="OIDC_PROVIDER_NAME" Default="" Mode="" Description="Label on the sign-in button." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+</Container>

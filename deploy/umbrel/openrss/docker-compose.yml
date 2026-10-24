@@ -1,0 +1,21 @@
+services:
+  app_proxy:
+    environment:
+      APP_HOST: openrss_server_1
+      APP_PORT: 3000
+      # Feed reader apps (NetNewsWire, Reeder, ReadYou...) sign in with openRSS app passwords
+      # and cannot send the Umbrel login cookie. The PWA manifest, service worker and icons are public assets.
+      PROXY_AUTH_WHITELIST: "/api/greader,/api/greader/*,/api/fever,/api/fever/*,/manifest.webmanifest,/sw.js,/icons/*"
+
+  server:
+    image: ghcr.io/carisoftwarebr/openrss:0.1.1@sha256:TODO
+    user: "1000:1000"
+    restart: on-failure
+    environment:
+      # SQLite in the data folder; skips the first-run database wizard.
+      DATABASE_URL: file:/data/openrss.db
+      BETTER_AUTH_URL: http://${DEVICE_DOMAIN_NAME}:${APP_OPENRSS_PORT}
+      # Sign-in from the .local URL over HTTPS, the device hostname, Tailscale and the device IPs.
+      BETTER_AUTH_TRUSTED_ORIGINS: https://${DEVICE_DOMAIN_NAME}:${APP_OPENRSS_PORT},http://${DEVICE_HOSTNAME}:${APP_OPENRSS_PORT},http://*.ts.net:${APP_OPENRSS_PORT},https://*.ts.net:${APP_OPENRSS_PORT},${APP_OPENRSS_LOCAL_URLS}
+    volumes:
+      - ${APP_DATA_DIR}/data:/data

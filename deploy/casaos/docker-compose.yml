@@ -1,0 +1,73 @@
+name: openrss
+services:
+  openrss:
+    image: ghcr.io/carisoftwarebr/openrss:0.1.1
+    restart: unless-stopped
+    network_mode: bridge
+    environment:
+      PUID: $PUID
+      PGID: $PGID
+      DATABASE_URL: file:/data/openrss.db
+    ports:
+      - target: 3000
+        published: "8285"
+        protocol: tcp
+    volumes:
+      - type: bind
+        source: /DATA/AppData/$AppID/data
+        target: /data
+    container_name: openrss
+x-casaos:
+  id: io.github.carisoftwarebr.openrss
+  main: openrss
+  index: /
+  port_map: "8285"
+  scheme: http
+  icon: https://cdn.jsdelivr.net/gh/IceWhaleTech/CasaOS-AppStore@main/Apps/openRSS/icon.png
+  screenshot_link:
+    - https://cdn.jsdelivr.net/gh/IceWhaleTech/CasaOS-AppStore@main/Apps/openRSS/screenshot-1.png
+    - https://cdn.jsdelivr.net/gh/IceWhaleTech/CasaOS-AppStore@main/Apps/openRSS/screenshot-2.png
+  title:
+    en_US: openRSS
+  tagline:
+    en_US: A quiet RSS reader with AI that works for you
+    pt_BR: Um leitor de RSS tranquilo, com IA que trabalha para você
+    es_ES: Un lector RSS tranquilo, con IA que trabaja para ti
+  description:
+    en_US: >-
+      openRSS turns hundreds of unread headlines into a short list worth your time. It groups duplicate stories,
+      scores each article from 0 to 100 by your interests, summarizes, translates and builds a daily digest.
+      AI is optional: use OpenAI, Anthropic, OpenRouter or a local model through Ollama.
+      Also includes OPML import/export, automatic rules with ntfy/Discord/Slack/Telegram notifications,
+      single sign-on (OIDC) and the Google Reader and Fever APIs for NetNewsWire, Reeder, ReadYou and other apps.
+    pt_BR: >-
+      O openRSS transforma centenas de manchetes não lidas numa lista curta que vale o seu tempo. Ele agrupa notícias
+      duplicadas, dá uma nota de 0 a 100 a cada artigo conforme seus interesses, resume, traduz e monta um resumo diário.
+      A IA é opcional: use OpenAI, Anthropic, OpenRouter ou um modelo local pelo Ollama.
+      Também tem importação/exportação OPML, regras automáticas com avisos por ntfy/Discord/Slack/Telegram,
+      login único (OIDC) e as APIs Google Reader e Fever para NetNewsWire, Reeder, ReadYou e outros apps.
+    es_ES: >-
+      openRSS convierte cientos de titulares sin leer en una lista corta que vale tu tiempo. Agrupa noticias duplicadas,
+      puntúa cada artículo de 0 a 100 según tus intereses, resume, traduce y arma un resumen diario.
+      La IA es opcional: usa OpenAI, Anthropic, OpenRouter o un modelo local con Ollama.
+      También incluye importación/exportación OPML, reglas automáticas con avisos por ntfy/Discord/Slack/Telegram,
+      inicio de sesión único (OIDC) y las APIs Google Reader y Fever para NetNewsWire, Reeder, ReadYou y otras apps.
+  tips:
+    before_install:
+      en_US: After installing, open openRSS and create your account. The first account becomes the administrator.
+      pt_BR: Depois de instalar, abra o openRSS e crie sua conta. A primeira conta vira a de administrador.
+      es_ES: Después de instalar, abre openRSS y crea tu cuenta. La primera cuenta será la de administrador.
+  author: CariSoftware
+  developer: CariSoftware
+  category: Productivity
+  architectures:
+    - amd64
+    - arm64
+  version: "0.1.1"
+  update_at: "TODO"
+  release_notes:
+    en_US: First release in the app store.
+  website: https://github.com/CariSoftwareBR/openRSS
+  repo: https://github.com/CariSoftwareBR/openRSS
+  support: https://github.com/CariSoftwareBR/openRSS/issues
+  docs: https://github.com/CariSoftwareBR/openRSS/blob/main/INSTALL.md

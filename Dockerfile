@@ -42,12 +42,17 @@ COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/prisma ./prisma
 COPY --from=builder --chown=node:node /app/.next ./.next
 COPY --from=builder --chown=node:node /app/public ./public
+COPY --chmod=755 scripts/openrss-entrypoint.sh /usr/local/bin/openrss-entrypoint.sh
 
-USER node
+# Começa como root só para ajustar o dono de /data; o entrypoint desce para PUID:PGID
+# (padrão 1000:1000, o usuário "node"). Com --user/user:, o app já sobe sem root.
+ENV PUID=1000 \
+    PGID=1000
 VOLUME ["/data"]
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s \
   CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 # Migrations são aplicadas pelo próprio app na inicialização (src/instrumentation-node.ts).
+ENTRYPOINT ["openrss-entrypoint.sh"]
 CMD ["node", "node_modules/next/dist/bin/next", "start"]

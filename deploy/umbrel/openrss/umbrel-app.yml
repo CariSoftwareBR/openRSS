@@ -1,0 +1,51 @@
+manifestVersion: 1
+id: openrss
+storage:
+  dataRoot: data
+category: social
+name: openRSS
+version: "0.1.1"
+tagline: A quiet RSS reader with AI that works for you
+description: >-
+  openRSS is a self-hosted RSS reader that turns hundreds of unread headlines into a short list worth your time.
+  It groups duplicate stories from different sources, scores each article from 0 to 100 based on your interests,
+  and summarizes, translates or reads articles aloud on demand.
+
+
+  AI is optional and on your terms: bring your own OpenAI, Anthropic or OpenRouter key, or point it at a local model
+  running in Ollama so nothing leaves your Umbrel.
+
+
+  Features include:
+
+  - Today view ranked by AI priority, plus All, Saved, folders and tags
+
+  - Duplicate stories grouped as "+N sources"
+
+  - Streamed AI summaries, questions about an article, translation and text-to-speech
+
+  - A daily digest grouped by topic, on demand or by e-mail
+
+  - A chat that searches and reads your feeds for you
+
+  - Automatic rules that mark read, save, highlight or notify you via ntfy, Discord, Slack, Telegram or webhook
+
+  - OPML import and export, full-article mode and offline reading as an installable app
+
+  - Google Reader and Fever APIs for NetNewsWire, Reeder, ReadYou, FluentReader, Unread and more
+
+
+  After installing, open openRSS and create your account. The first account becomes the administrator.
+releaseNotes: ""
+developer: CariSoftware
+website: https://github.com/CariSoftwareBR/openRSS
+dependencies: []
+repo: https://github.com/CariSoftwareBR/openRSS
+support: https://github.com/CariSoftwareBR/openRSS/issues
+port: 8285
+gallery: []
+path: ""
+defaultUsername: ""
+defaultPassword: ""
+submitter: CariSoftware
+submission: https://github.com/getumbrel/umbrel-apps/pull/TODO
