@@ -135,6 +135,11 @@ image: ghcr.io/carisoftwarebr/openrss:latest
 
 In production, prefer the immutable `sha-<full commit>` tag.
 
+The image runs on `linux/amd64` and `linux/arm64`. When `/data` is a bind mount owned by another user
+(Unraid, CasaOS, TrueNAS), set `PUID` and `PGID` to that owner (Unraid: `99` and `100`): the container
+fixes the folder's owner on start and runs the app as that user. Ready-made templates for Unraid, Umbrel
+and CasaOS are in [`deploy/`](deploy/).
+
 ### Local development
 
 Node.js 22.12+ and npm 10+:
