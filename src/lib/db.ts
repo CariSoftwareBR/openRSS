@@ -16,14 +16,14 @@ function createClient() {
 
   if (dbProvider === "postgresql") {
     // Client gerado a partir de prisma/postgres/schema.prisma (modelos idênticos, tipos compatíveis).
-    /* eslint-disable @typescript-eslint/no-require-imports */
+    /* oxlint-disable typescript/no-require-imports */
     const { PrismaPg } = require("@prisma/adapter-pg") as typeof import("@prisma/adapter-pg");
     const { PrismaClient: PgClient } = require("@/generated/prisma-postgres/client") as { PrismaClient: typeof PrismaClient };
-    /* eslint-enable @typescript-eslint/no-require-imports */
+    /* oxlint-enable typescript/no-require-imports */
     return new PgClient({ adapter: new PrismaPg({ connectionString: url }) });
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // oxlint-disable-next-line typescript/no-require-imports
   const { PrismaBetterSqlite3 } = require("@prisma/adapter-better-sqlite3") as typeof import("@prisma/adapter-better-sqlite3");
   return new PrismaClient({
     adapter: new PrismaBetterSqlite3({ url: url.replace(/^file:/, ""), timeout: 5000 }),

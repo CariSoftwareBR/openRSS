@@ -129,7 +129,7 @@ function PreviewImage({ item, className }: { item: ArticleListItem; className: s
     );
   }
   return (
-    // eslint-disable-next-line @next/next/no-img-element
+    // oxlint-disable-next-line nextjs/no-img-element
     <img
       src={item.imageUrl}
       alt=""

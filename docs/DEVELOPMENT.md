@@ -37,7 +37,7 @@ DATABASE_URL=file:./data/openrss.db
 | `npm run db:migrate -- --name <nome>` | Cria migration para o provider do `.env`/`config.json` |
 | `npm run db:deploy` | Aplica migrations manualmente (o app já faz isso ao iniciar) |
 | `npm run typecheck` | Gera tipos de rota do Next (`next typegen`) e roda `tsc --noEmit` |
-| `npm run lint` | ESLint |
+| `npm run lint` | Oxlint |
 | `npm test` | Testes Vitest |
 
 ## Checklist antes de abrir um PR
