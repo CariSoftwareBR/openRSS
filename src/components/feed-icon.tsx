@@ -8,7 +8,7 @@ export function FeedIcon({ src, className }: { src?: string | null; className?: 
   const [failedSrc, setFailedSrc] = useState<string | null>(null);
   if (!src || failedSrc === src) return <Rss className={cn("size-4 shrink-0 text-muted-foreground", className)} />;
   return (
-    // eslint-disable-next-line @next/next/no-img-element
+    // oxlint-disable-next-line nextjs/no-img-element
     <img
       src={src}
       alt=""

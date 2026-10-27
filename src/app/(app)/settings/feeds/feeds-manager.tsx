@@ -84,6 +84,7 @@ export function FeedsManager({ folders, subscriptions }: { folders: { id: string
           {pending ? <Loader2 className="animate-spin" /> : <Upload />} {t("import")}
         </Button>
         <Button asChild>
+          {/* oxlint-disable-next-line nextjs/no-html-link-for-pages -- download de arquivo, não navegação entre páginas */}
           <a href="/api/opml/export">
             <Download /> {t("export")}
           </a>

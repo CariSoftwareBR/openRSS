@@ -1,8 +1,8 @@
 import type { ZodError } from "zod";
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- aceita qualquer tradutor tipado do next-intl */
+/* oxlint-disable typescript/no-explicit-any -- aceita qualquer tradutor tipado do next-intl */
 type TranslatorLike = { (key: any, values?: any): string; has(key: any): boolean };
-/* eslint-enable @typescript-eslint/no-explicit-any */
+/* oxlint-enable typescript/no-explicit-any */
 
 /**
  * Traduz o primeiro erro de um schema zod cujas mensagens são chaves do namespace de `t`.
