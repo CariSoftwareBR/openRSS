@@ -5,7 +5,7 @@ import { sanitizeArticleHtml } from "@/lib/feeds/sanitize";
 import { discoverFeeds } from "@/lib/feeds/discover";
 import { subscribe } from "@/lib/feeds/refresh";
 import { localizeError } from "@/lib/localized-error";
-import { userFromAppPassword, type ApiUser } from "./tokens";
+import { clientKeyOf, userFromAppPassword, type ApiUser } from "./tokens";
 import { articleIdsFromNums, articleNums, ensureMissingRefs } from "./refs";
 import { accessibleArticles, setArticleStates } from "@/lib/article-state";
 
@@ -52,7 +52,7 @@ async function readParams(request: Request) {
 async function authenticate(request: Request) {
   const header = request.headers.get("authorization") ?? "";
   const token = /^GoogleLogin\s+auth=(.+)$/i.exec(header)?.[1]?.trim();
-  return userFromAppPassword(token);
+  return userFromAppPassword(token, clientKeyOf(request));
 }
 
 /** Filtro de artigos de um stream do usuário. `null` = stream desconhecido. */
@@ -326,7 +326,7 @@ export async function handleGReader(request: Request, path: string): Promise<Res
   if (path === "accounts/ClientLogin") {
     const p = await readParams(request);
     const password = p.get("Passwd");
-    const user = await userFromAppPassword(password);
+    const user = await userFromAppPassword(password, clientKeyOf(request));
     if (!user || user.email.toLowerCase() !== (p.get("Email") ?? "").trim().toLowerCase()) return unauthorized();
     return text(`SID=${password}\nLSID=null\nAuth=${password}\n`);
   }

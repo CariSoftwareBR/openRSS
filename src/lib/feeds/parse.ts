@@ -77,6 +77,8 @@ type ParseOptions = {
    * pulam o saneamento do HTML, que é a parte cara do parse e se repetia a cada atualização.
    */
   existing?: (guids: string[]) => Promise<Map<string, Date>>;
+  /** Itens publicados antes disto (fora da retenção) são descartados sem passar pelo saneamento. */
+  skipBefore?: Date;
 };
 
 export function looksLikeFeed(body: string): boolean {
@@ -111,7 +113,7 @@ export async function parseFeed(xml: string, feedUrl: string, opts: ParseOptions
   const siteUrl = feed.link ? safeUrl(feed.link, feedUrl) : null;
 
   // Fase 1 (barata): link, data e guid de cada item.
-  const heads = feed.items.slice(0, 200).map((item) => {
+  const all = feed.items.slice(0, 200).map((item) => {
     const rawLink = item.link ? safeUrl(item.link, siteUrl ?? feedUrl) : null;
     const link = rawLink ? (canonicalizeUrl(rawLink) ?? rawLink) : null;
     const rawHtml = item["content:encoded"] ?? item.content ?? item.summary ?? "";
@@ -121,6 +123,7 @@ export async function parseFeed(xml: string, feedUrl: string, opts: ParseOptions
     const guid = itemGuid(item.guid ?? item.id, link, `${item.title ?? ""}|${dateKey}|${rawHtml || item.contentSnippet || ""}`);
     return { item, link, rawHtml, publishedAt, hasPublishDate, guid };
   });
+  const heads = opts.skipBefore ? all.filter((h) => h.publishedAt >= opts.skipBefore!) : all;
 
   const stored = opts.existing && heads.length ? await opts.existing([...new Set(heads.map((h) => h.guid))]) : null;
   const known: KnownItem[] = [];

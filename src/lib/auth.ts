@@ -58,9 +58,10 @@ export const auth = lazyObject(() => {
     session: {
       expiresIn: 60 * 60 * 24 * 30,
       updateAge: 60 * 60 * 24,
-      // Sessão validada por um cookie assinado por 5 min, em vez de uma consulta ao banco a cada
-      // requisição e server action. Uma sessão revogada pode valer até esse prazo.
-      cookieCache: { enabled: true, maxAge: 5 * 60 },
+      // Sessão validada por um cookie assinado por 2 min, em vez de uma consulta ao banco a cada
+      // requisição e server action. Uma sessão revogada pode valer até esse prazo; ações de admin
+      // conferem o papel no banco (requireAdmin).
+      cookieCache: { enabled: true, maxAge: 2 * 60 },
     },
     hooks: {
       // Cadastro público só quando não há usuários (primeiro admin) ou quando o admin liberou.

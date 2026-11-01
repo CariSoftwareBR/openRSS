@@ -20,7 +20,7 @@ const subscribe = (onChange: () => void) => {
 };
 
 /** Aviso de nova versão (só para administradores) com as novidades e o botão de atualizar. */
-export function UpdateNotice({ update }: { update: UpdateInfo }) {
+export function UpdateNotice({ update, ignoreDismissed = false }: { update: UpdateInfo; ignoreDismissed?: boolean }) {
   const t = useTranslations("updates");
   const format = useFormatter();
   const [open, setOpen] = useState(false);
@@ -37,7 +37,7 @@ export function UpdateNotice({ update }: { update: UpdateInfo }) {
     if (poll.current) clearInterval(poll.current);
   }, []);
 
-  if ((dismissed || dismissedNow) && !open) return null;
+  if (!ignoreDismissed && (dismissed || dismissedNow) && !open) return null;
 
   function waitForNewVersion() {
     const started = Date.now();

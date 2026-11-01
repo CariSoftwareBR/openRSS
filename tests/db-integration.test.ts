@@ -682,3 +682,25 @@ describe("maintenance", () => {
     delete process.env.OPENRSS_DATA_DIR;
   });
 });
+
+describe("cursor pagination", () => {
+  it("does not skip unread articles when the first page was read meanwhile", async () => {
+    const now = Date.now();
+    const feed = await createFeed(
+      "https://cursor.example/feed",
+      Array.from({ length: 45 }, (_, i) => ({ guid: `c${i}`, publishedAt: new Date(now - i * 60_000) })),
+    );
+    await db.subscription.create({ data: { userId: "bob", feedId: feed.id } });
+    const { setArticleStates } = await import("@/lib/article-state");
+    const scope = { kind: "feed" as const, feedId: feed.id };
+
+    const first = await listArticles("bob", scope, { unreadOnly: true });
+    expect(first.items).toHaveLength(40);
+    expect(first.hasMore).toBe(true);
+    await setArticleStates("bob", first.items.map((i) => i.id), { isRead: true });
+
+    const second = await listArticles("bob", scope, { unreadOnly: true, cursor: first.nextCursor });
+    expect(second.items.map((i) => i.title)).toEqual(["c40", "c41", "c42", "c43", "c44"]);
+    expect(second.hasMore).toBe(false);
+  });
+});

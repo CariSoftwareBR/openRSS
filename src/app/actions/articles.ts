@@ -1,11 +1,12 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { markStorySiblingsRead, setArticleStates } from "@/lib/article-state";
 import { nextUnreadFeedId, orderedSidebarFeeds } from "@/lib/feeds/next-unread";
-import { articleScopeWhere, getArticle, getSidebarData, listArticles, type ArticleScope } from "@/lib/queries";
+import { articleScopeWhere, getArticle, getSidebarData, listArticles, type ArticleScope, type ListCursor } from "@/lib/queries";
 
 /** Carrega o artigo para o leitor e marca como lido. */
 export async function openArticleAction(articleId: string) {
@@ -51,6 +52,8 @@ export async function markReadMany(articleIds: string[]) {
   const user = await requireUser();
   const ids = articleIds.filter((id) => typeof id === "string").slice(0, 200);
   await setArticleStates(user.id, ids, { isRead: true });
+  // Como em setRead: as outras fontes do mesmo fato (escondidas pelo agrupamento) também.
+  for (const id of ids) await markStorySiblingsRead(user.id, id);
 }
 
 export async function setSaved(articleId: string, isSaved: boolean) {
@@ -101,6 +104,8 @@ export async function markAllRead(scope: ArticleScope) {
         }
       });
     }
+    // Ação rara: invalida também o cache do roteador (o "Voltar" não mostra o estado antigo).
+    revalidatePath("/", "layout");
   }
   const nextFeedId = scope.kind === "feed" ? await findNextUnreadFeedId(user.id, scope.feedId) : null;
   return { count: ids.length, nextFeedId };
@@ -111,7 +116,17 @@ async function findNextUnreadFeedId(userId: string, currentFeedId: string) {
   return nextUnreadFeedId(orderedSidebarFeeds(sidebar), currentFeedId);
 }
 
-export async function loadMoreArticles(scope: ArticleScope, page: number, unreadOnly: boolean, query?: string) {
+export async function loadMoreArticles(scope: ArticleScope, cursor: ListCursor | null, unreadOnly: boolean, query?: string) {
   const user = await requireUser();
-  return listArticles(user.id, scope, { page, unreadOnly, query });
+  // Vem do cliente: só aceita o formato esperado.
+  const valid =
+    cursor &&
+    typeof cursor.id === "string" &&
+    cursor.id.length <= 64 &&
+    typeof cursor.publishedAt === "string" &&
+    !Number.isNaN(Date.parse(cursor.publishedAt)) &&
+    (cursor.score === undefined || cursor.score === null || typeof cursor.score === "number")
+      ? { id: cursor.id, publishedAt: cursor.publishedAt, score: cursor.score ?? null }
+      : null;
+  return listArticles(user.id, scope, { cursor: valid, unreadOnly, query });
 }

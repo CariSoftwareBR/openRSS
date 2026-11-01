@@ -20,13 +20,36 @@ const validCache = new Map<string, string>();
 /** Credenciais recusadas há pouco (por sha256): um app mal configurado repetindo não custa scrypt. */
 const rejected = new Map<string, number>();
 const REJECTED_TTL_MS = 10 * 60_000;
-/** Teto global de scrypts para valores desconhecidos: o scrypt usa o threadpool da libuv (o mesmo do DNS). */
-const MAX_UNKNOWN_PER_MINUTE = 60;
-let unknownWindow = { start: 0, count: 0 };
+/**
+ * Scrypts para valores desconhecidos (o scrypt usa o threadpool da libuv, o mesmo do DNS): até 20
+ * por minuto por cliente e um teto global alto. O limite por cliente impede que alguém esgote o
+ * global e trave os apps legítimos; o global segura quem forja o cabeçalho de IP.
+ */
+const MAX_UNKNOWN_PER_CLIENT = 20;
+const MAX_UNKNOWN_GLOBAL = 600;
+const unknownWindows = new Map<string, { start: number; count: number }>();
+
+function overLimit(clientKey: string, now: number) {
+  const hit = (key: string, max: number) => {
+    let window = unknownWindows.get(key);
+    if (!window || now - window.start > 60_000) {
+      window = { start: now, count: 0 };
+      unknownWindows.set(key, window);
+    }
+    return ++window.count > max;
+  };
+  if (unknownWindows.size > 10_000) unknownWindows.clear();
+  return hit(`client:${clientKey}`, MAX_UNKNOWN_PER_CLIENT) || hit("global", MAX_UNKNOWN_GLOBAL);
+}
+
+/** Identifica o cliente para o limite: IP do proxy reverso, se houver. */
+export function clientKeyOf(request: Request) {
+  return (request.headers.get("x-forwarded-for")?.split(",")[0] ?? request.headers.get("x-real-ip") ?? "direct").trim() || "direct";
+}
 
 const fingerprint = (value: string) => createHash("sha256").update(value).digest("hex");
 
-async function lookup(value: string, field: "secretHash" | "feverKeyHash"): Promise<ApiUser | null> {
+async function lookup(value: string, field: "secretHash" | "feverKeyHash", clientKey: string): Promise<ApiUser | null> {
   const known = validCache.get(value);
   if (known) {
     const user = await resolve(field === "secretHash" ? { secretHash: known } : { feverKeyHash: known });
@@ -36,8 +59,7 @@ async function lookup(value: string, field: "secretHash" | "feverKeyHash"): Prom
   const now = Date.now();
   const key = fingerprint(value);
   if ((rejected.get(key) ?? 0) > now) return null;
-  if (now - unknownWindow.start > 60_000) unknownWindow = { start: now, count: 0 };
-  if (++unknownWindow.count > MAX_UNKNOWN_PER_MINUTE) return null;
+  if (overLimit(clientKey, now)) return null;
 
   const hash = await storageHash(value);
   const user = await resolve(field === "secretHash" ? { secretHash: hash } : { feverKeyHash: hash });
@@ -86,11 +108,11 @@ async function resolve(where: { secretHash: string } | { feverKeyHash: string })
 }
 
 /** Senha de aplicativo (Google Reader: ClientLogin e cabeçalho GoogleLogin auth=). */
-export async function userFromAppPassword(password: string | null | undefined) {
-  return password ? lookup(password, "secretHash") : null;
+export async function userFromAppPassword(password: string | null | undefined, clientKey = "direct") {
+  return password ? lookup(password, "secretHash", clientKey) : null;
 }
 
 /** api_key da Fever. */
-export async function userFromFeverKey(apiKey: string | null | undefined) {
-  return apiKey && /^[0-9a-f]{32}$/i.test(apiKey) ? lookup(apiKey.toLowerCase(), "feverKeyHash") : null;
+export async function userFromFeverKey(apiKey: string | null | undefined, clientKey = "direct") {
+  return apiKey && /^[0-9a-f]{32}$/i.test(apiKey) ? lookup(apiKey.toLowerCase(), "feverKeyHash", clientKey) : null;
 }

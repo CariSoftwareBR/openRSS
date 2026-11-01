@@ -1,10 +1,8 @@
 import { db } from "@/lib/db";
+import { escapeHtml } from "@/lib/mail";
 import { getApiUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
-
-const escapeHtml = (value: string) =>
-  value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
 /**
  * Exporta os artigos salvos: ?format=html (favoritos no formato Netscape, importável em

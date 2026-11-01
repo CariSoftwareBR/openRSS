@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { CheckCheck, Eye, EyeOff, Loader2, RefreshCw, Search, Sparkles, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
-import type { ArticleDetail, ArticleListItem, ArticleScope } from "@/lib/queries";
+import type { ArticleDetail, ArticleListItem, ArticleScope, ListCursor } from "@/lib/queries";
 import { loadMoreArticles, markAllRead, markReadMany, openArticleAction, setRead, setSaved } from "@/app/actions/articles";
 import { refreshFeedAction } from "@/app/actions/feeds";
 import { SaveLinkDialog } from "@/components/save-link";
@@ -39,7 +39,7 @@ export function ArticleWorkspace({
 }: {
   scope: ArticleScope;
   title: string;
-  initial: { items: ArticleListItem[]; hasMore: boolean };
+  initial: { items: ArticleListItem[]; hasMore: boolean; nextCursor: ListCursor | null };
   unreadOnly: boolean;
   query?: string;
   initialArticle: ArticleDetail | null;
@@ -58,7 +58,7 @@ export function ArticleWorkspace({
   const { refreshCounts } = useSidebarCounts();
   const [items, setItems] = useState(initial.items);
   const [hasMore, setHasMore] = useState(initial.hasMore);
-  const [page, setPage] = useState(0);
+  const [cursor, setCursor] = useState<ListCursor | null>(initial.nextCursor);
   const [selected, setSelected] = useState<ArticleDetail | null>(initialArticle);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [view, setView] = useState<ListView>(initialView);
@@ -334,10 +334,10 @@ export function ArticleWorkspace({
           toast.error(res.error);
           return;
         }
-        const fresh = await loadMoreArticles(scope, 0, unreadOnly, query);
+        const fresh = await loadMoreArticles(scope, null, unreadOnly, query);
         setItems(fresh.items);
         setHasMore(fresh.hasMore);
-        setPage(0);
+        setCursor(fresh.nextCursor);
         toast.success(res.added ? t("newArticles", { count: res.added }) : t("noNewArticles"));
         router.refresh();
       } catch {
@@ -352,10 +352,10 @@ export function ArticleWorkspace({
     loadingMoreRef.current = true;
     startLoadMore(async () => {
       try {
-        const next = await loadMoreArticles(scope, page + 1, unreadOnly, query);
+        const next = await loadMoreArticles(scope, cursor, unreadOnly, query);
         setItems((list) => [...list, ...next.items.filter((n) => !list.some((i) => i.id === n.id))]);
         setHasMore(next.hasMore);
-        setPage((p) => p + 1);
+        setCursor(next.nextCursor);
       } finally {
         loadingMoreRef.current = false;
       }
@@ -409,6 +409,8 @@ export function ArticleWorkspace({
       (entries) => {
         const passed: string[] = [];
         for (const entry of entries) {
+          // Lista escondida (leitor aberto em telas menores que xl): retângulos zerados não são rolagem.
+          if (!entry.rootBounds || entry.rootBounds.height === 0 || entry.boundingClientRect.height === 0) continue;
           const id = (entry.target as HTMLElement).dataset.articleId;
           // Saiu por cima (não por baixo, ao rolar de volta) e ainda não lido.
           if (id && !entry.isIntersecting && entry.rootBounds && entry.boundingClientRect.bottom <= entry.rootBounds.top && unread.has(id)) {

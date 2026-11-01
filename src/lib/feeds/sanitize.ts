@@ -2,6 +2,33 @@ import sanitizeHtml from "sanitize-html";
 
 const EMBED_HOSTS = ["www.youtube.com", "www.youtube-nocookie.com", "player.vimeo.com"];
 
+/**
+ * Candidatos de um srcset. A URL vai até o primeiro espaço e pode conter vírgulas (data:,
+ * Cloudinary "w_400,c_fill"); vírgulas no fim da URL ou depois do descritor separam candidatos.
+ */
+export function parseSrcset(value: string): { url: string; descriptor: string }[] {
+  const out: { url: string; descriptor: string }[] = [];
+  let i = 0;
+  while (i < value.length) {
+    while (i < value.length && /[\s,]/.test(value[i])) i++;
+    if (i >= value.length) break;
+    let end = i;
+    while (end < value.length && !/\s/.test(value[end])) end++;
+    let url = value.slice(i, end);
+    i = end;
+    let descriptor = "";
+    if (url.endsWith(",")) {
+      url = url.replace(/,+$/, "");
+    } else {
+      const comma = value.indexOf(",", i);
+      descriptor = value.slice(i, comma === -1 ? value.length : comma).trim();
+      i = comma === -1 ? value.length : comma + 1;
+    }
+    if (url) out.push({ url, descriptor });
+  }
+  return out;
+}
+
 export function sanitizeArticleHtml(html: string, baseUrl?: string | null): string {
   const absolute = (value: string) => {
     if (!baseUrl || !value) return value;
@@ -12,14 +39,7 @@ export function sanitizeArticleHtml(html: string, baseUrl?: string | null): stri
     }
   };
   // srcset: "url 1x, url 2x" / "url 480w"; cada URL relativa vira absoluta (senão a imagem quebra no leitor).
-  const absoluteSrcset = (value: string | undefined) =>
-    value
-      ?.split(",")
-      .map((part) => {
-        const [url, ...descriptor] = part.trim().split(/\s+/);
-        return [absolute(url), ...descriptor].join(" ");
-      })
-      .join(", ");
+  const absoluteSrcset = (value: string | undefined) => value && parseSrcset(value).map(({ url, descriptor }) => [absolute(url), descriptor].filter(Boolean).join(" ")).join(", ");
   const withAbsolute = (attribs: Record<string, string>, names: string[]) => {
     const out = { ...attribs };
     for (const name of names) if (out[name]) out[name] = absolute(out[name]);

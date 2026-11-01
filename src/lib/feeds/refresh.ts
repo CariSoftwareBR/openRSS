@@ -154,7 +154,10 @@ async function refreshFeedUnlocked(feedId: string): Promise<RefreshResult> {
     }
 
     let stored = new Map<string, Date>();
-    const parsed = await parseFeed(res.body, res.url, { existing: async (guids) => (stored = await storedGuids(feedId, guids)) });
+    const parsed = await parseFeed(res.body, res.url, {
+      existing: async (guids) => (stored = await storedGuids(feedId, guids)),
+      skipBefore: await retentionCutoff(),
+    });
     await fixKnownDates(feedId, parsed.known, stored);
     const createdIds = await ingestItems(feedId, parsed.items);
     await markStaleUnread(feedId);

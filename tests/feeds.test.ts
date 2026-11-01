@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { looksLikeFeed, parseFeed } from "@/lib/feeds/parse";
 import { buildOpml, parseOpml } from "@/lib/feeds/opml";
-import { sanitizeArticleHtml } from "@/lib/feeds/sanitize";
+import { parseSrcset, sanitizeArticleHtml } from "@/lib/feeds/sanitize";
 
 const rss = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:media="http://search.yahoo.com/mrss/">
@@ -206,5 +206,19 @@ describe("sanitizeArticleHtml extras", () => {
     const html = sanitizeArticleHtml('<iframe src="https://www.youtube.com/embed/x"></iframe><iframe src="https://evil.test/x"></iframe>');
     expect(html).toContain('sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"');
     expect(html).not.toContain("evil.test");
+  });
+});
+
+describe("parseSrcset", () => {
+  it("keeps commas inside URLs (data:, Cloudinary)", () => {
+    expect(parseSrcset("https://res.cloudinary.com/x/upload/w_400,c_fill/a.jpg 400w, /b.jpg 800w")).toEqual([
+      { url: "https://res.cloudinary.com/x/upload/w_400,c_fill/a.jpg", descriptor: "400w" },
+      { url: "/b.jpg", descriptor: "800w" },
+    ]);
+    expect(parseSrcset("data:image/gif;base64,R0lGOD 1x")).toEqual([{ url: "data:image/gif;base64,R0lGOD", descriptor: "1x" }]);
+    expect(parseSrcset("/a.jpg, /b.jpg 2x")).toEqual([
+      { url: "/a.jpg", descriptor: "" },
+      { url: "/b.jpg", descriptor: "2x" },
+    ]);
   });
 });

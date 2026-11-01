@@ -40,7 +40,7 @@ export function VersionSection({ version, checkEnabled, initial }: { version: st
           </Button>
         </div>
         {!checkEnabled && <p className="text-xs text-muted-foreground">{t("checkDisabled")}</p>}
-        {update ? <div className="-mx-3 -mb-2"><UpdateNotice key={update.latest} update={update} /></div> : checked && <p className="text-xs text-muted-foreground">{t("upToDate")}</p>}
+        {update ? <div className="-mx-3 -mb-2"><UpdateNotice key={update.latest} update={update} ignoreDismissed /></div> : checked && <p className="text-xs text-muted-foreground">{t("upToDate")}</p>}
       </Card>
     </section>
   );
