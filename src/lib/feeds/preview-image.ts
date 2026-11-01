@@ -1,4 +1,5 @@
 import "server-only";
+import { db } from "@/lib/db";
 import { safeFetch } from "./net";
 
 const PRIORITY = ["og:image:secure_url", "og:image", "og:image:url", "twitter:image", "twitter:image:src"];
@@ -50,4 +51,77 @@ export function extractPreviewImage(html: string, pageUrl: string): string | nul
 export async function findPreviewImage(pageUrl: string): Promise<string | null> {
   const res = await safeFetch(pageUrl, { accept: "text/html,application/xhtml+xml", timeoutMs: 8000, maxBytes: 4 * 1024 * 1024 });
   return extractPreviewImage(res.body, res.url);
+}
+
+/** Falhas transitórias por artigo (em memória): espera crescente e desistência depois de algumas. */
+const failures = new Map<string, { count: number; retryAt: number }>();
+const MAX_FAILURES = 4;
+const RETRY_BASE_MS = 10 * 60_000;
+
+function coolingDown(id: string, now = Date.now()) {
+  const entry = failures.get(id);
+  return entry !== undefined && entry.retryAt > now;
+}
+
+/**
+ * Resolve e grava a imagem de capa de artigos sem imagem ("" quando não há, para não buscar
+ * de novo). Falhas transitórias só viram "" depois de algumas tentativas espaçadas.
+ * Retorna o resultado só dos artigos que foram verificados.
+ */
+export async function resolvePreviewImages(
+  articles: { id: string; url: string }[],
+  concurrency = 6,
+): Promise<Record<string, string | null>> {
+  const result: Record<string, string | null> = {};
+  const queue = articles.filter((a) => !coolingDown(a.id));
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
+      for (let a = queue.shift(); a; a = queue.shift()) {
+        let image: string | null;
+        try {
+          image = await findPreviewImage(a.url);
+        } catch {
+          const count = (failures.get(a.id)?.count ?? 0) + 1;
+          if (count < MAX_FAILURES) {
+            failures.set(a.id, { count, retryAt: Date.now() + RETRY_BASE_MS * 2 ** (count - 1) });
+            continue;
+          }
+          image = null;
+        }
+        failures.delete(a.id);
+        // imageUrl: null no where evita sobrescrever uma imagem gravada por outro caminho.
+        await db.article.updateMany({ where: { id: a.id, imageUrl: null }, data: { imageUrl: image ?? "" } }).catch(() => {});
+        result[a.id] = image;
+      }
+    }),
+  );
+  if (failures.size > 5000) {
+    for (const [id, entry] of failures) if (entry.retryAt < Date.now()) failures.delete(id);
+  }
+  return result;
+}
+
+/** Janela dos artigos cuja capa o agendador busca em segundo plano. */
+const BACKGROUND_WINDOW_MS = 3 * 86400_000;
+
+/**
+ * Busca em segundo plano a capa dos artigos recentes que ainda não foram verificados, para a
+ * listagem já abrir com as imagens. Limitado por chamada para não martelar os sites.
+ */
+export async function fillPendingPreviewImages(limit = 24) {
+  const pending = await db.article.findMany({
+    where: {
+      imageUrl: null,
+      url: { not: null },
+      ...(failures.size ? { id: { notIn: [...failures.keys()].filter((id) => coolingDown(id)).slice(0, 500) } } : {}),
+      publishedAt: { gte: new Date(Date.now() - BACKGROUND_WINDOW_MS) },
+      feed: { subscriptions: { some: {} } },
+    },
+    orderBy: { publishedAt: "desc" },
+    take: limit,
+    select: { id: true, url: true },
+  });
+  if (pending.length === 0) return 0;
+  const found = await resolvePreviewImages(pending.map((a) => ({ id: a.id, url: a.url! })), 4);
+  return Object.keys(found).length;
 }

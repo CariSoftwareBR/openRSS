@@ -28,6 +28,7 @@
     "retry": "Reintentar"
   },
   "ui": {
+    "loading": "Cargando…",
     "resizeHint": "Arrastra para redimensionar · doble clic para restaurar",
     "combobox": {
       "placeholder": "Selecciona…",

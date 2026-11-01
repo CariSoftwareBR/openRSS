@@ -1,11 +1,9 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { getLocale, getTranslations } from "next-intl/server";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { extractFullContent } from "@/lib/feeds/extract";
-import { findPreviewImage } from "@/lib/feeds/preview-image";
 import { sanitizeArticleHtml } from "@/lib/feeds/sanitize";
 import { localizeError } from "@/lib/localized-error";
 import { markStorySiblingsRead } from "@/lib/article-state";
@@ -47,7 +45,8 @@ export async function setRead(articleId: string, isRead: boolean) {
     update: { isRead, readAt: isRead ? new Date() : null },
   });
   if (isRead) await markStorySiblingsRead(user.id, articleId);
-  revalidatePath("/", "layout");
+  // Sem revalidatePath: a lista já está atualizada no cliente e a barra lateral busca só os
+  // contadores (/api/sidebar/counts). Revalidar remontava a página inteira a cada clique.
 }
 
 export async function setSaved(articleId: string, isSaved: boolean) {
@@ -58,7 +57,6 @@ export async function setSaved(articleId: string, isSaved: boolean) {
     create: { userId: user.id, articleId, isSaved, savedAt: isSaved ? new Date() : null },
     update: { isSaved, savedAt: isSaved ? new Date() : null },
   });
-  revalidatePath("/", "layout");
 }
 
 /** Marca como lidos todos os artigos do escopo publicados até o início da operação. */
@@ -99,7 +97,6 @@ export async function markAllRead(scope: ArticleScope) {
         }
       });
     }
-    revalidatePath("/", "layout");
   }
   const nextFeedId = scope.kind === "feed" ? await findNextUnreadFeedId(user.id, scope.feedId) : null;
   return { count: ids.length, nextFeedId };
@@ -128,35 +125,6 @@ export async function loadFullContent(articleId: string): Promise<{ html?: strin
   } catch (err) {
     return { error: err instanceof Error ? localizeError(err, await getLocale()) : t("fetchFailed") };
   }
-}
-
-/**
- * Busca a imagem de capa (og:image) dos artigos cujo feed não traz imagem.
- * Grava "" quando não encontra, para não buscar de novo.
- */
-export async function loadPreviewImagesAction(articleIds: string[]): Promise<Record<string, string | null>> {
-  const user = await requireUser();
-  const articles = await db.article.findMany({
-    where: { id: { in: articleIds.slice(0, 24) }, imageUrl: null, url: { not: null }, feed: { subscriptions: { some: { userId: user.id } } } },
-    select: { id: true, url: true },
-  });
-
-  const result: Record<string, string | null> = {};
-  const queue = [...articles];
-  await Promise.all(
-    Array.from({ length: Math.min(6, queue.length) }, async () => {
-      for (let a = queue.shift(); a; a = queue.shift()) {
-        try {
-          const image = await findPreviewImage(a.url!);
-          await db.article.update({ where: { id: a.id }, data: { imageUrl: image ?? "" } });
-          result[a.id] = image;
-        } catch {
-          // Falhas transitórias não são persistidas; uma sessão futura pode tentar novamente.
-        }
-      }
-    }),
-  );
-  return result;
 }
 
 export async function loadMoreArticles(scope: ArticleScope, page: number, unreadOnly: boolean, query?: string) {

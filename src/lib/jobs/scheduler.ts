@@ -4,6 +4,7 @@ import { tuneDatabase } from "@/lib/db";
 import { applyRetention, refreshDueFeeds } from "@/lib/feeds/refresh";
 import { indexPendingEmbeddings, processNewArticles } from "@/lib/feeds/pipeline";
 import { groupRecentStories } from "@/lib/feeds/stories";
+import { fillPendingPreviewImages } from "@/lib/feeds/preview-image";
 import { runScheduledDigests } from "@/lib/ai/digest";
 import { withLock } from "./lock";
 
@@ -27,6 +28,10 @@ export async function startScheduler() {
         }
         await indexPendingEmbeddings();
       }).catch(log("refresh"));
+    }),
+    // Capas (og:image) dos artigos recentes cujo feed não traz imagem: a listagem já abre com elas.
+    new Cron("30 * * * * *", { protect: true }, async () => {
+      await withLock("preview-images", 5 * 60_000, () => fillPendingPreviewImages()).catch(log("preview-images"));
     }),
     new Cron("5 * * * *", { protect: true }, async () => {
       await withLock("digest", 30 * 60_000, () => runScheduledDigests()).catch(log("digest"));

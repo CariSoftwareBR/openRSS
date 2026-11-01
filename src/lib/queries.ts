@@ -29,17 +29,7 @@ export async function getSidebarData(userId: string) {
     db.userArticle.count({ where: { userId, isSaved: true } }),
   ]);
 
-  const counts = subscriptions.length
-    ? await db.article.groupBy({
-        by: ["feedId"],
-        where: {
-          feedId: { in: subscriptions.map((s) => s.feedId) },
-          NOT: { states: { some: { userId, isRead: true } } },
-        },
-        _count: { _all: true },
-      })
-    : [];
-  const unreadByFeed = new Map(counts.map((c) => [c.feedId, c._count._all]));
+  const unreadByFeed = await unreadCountsByFeed(userId, subscriptions.map((s) => s.feedId));
 
   const subs = subscriptions
     .map((s) => ({
@@ -68,6 +58,29 @@ export async function getSidebarData(userId: string) {
 }
 
 export type SidebarData = Awaited<ReturnType<typeof getSidebarData>>;
+
+/** Não lidos por feed (só os feeds com algum não lido aparecem no mapa). */
+export async function unreadCountsByFeed(userId: string, feedIds: string[]) {
+  if (feedIds.length === 0) return new Map<string, number>();
+  const counts = await db.article.groupBy({
+    by: ["feedId"],
+    where: { feedId: { in: feedIds }, NOT: { states: { some: { userId, isRead: true } } } },
+    _count: { _all: true },
+  });
+  return new Map(counts.map((c) => [c.feedId, c._count._all]));
+}
+
+/** Contadores da barra lateral, sem o resto dos dados: usados para atualizá-la depois de um clique. */
+export async function getSidebarCounts(userId: string) {
+  const [subscriptions, saved] = await Promise.all([
+    db.subscription.findMany({ where: { userId }, select: { feedId: true } }),
+    db.userArticle.count({ where: { userId, isSaved: true } }),
+  ]);
+  const unread = await unreadCountsByFeed(userId, subscriptions.map((s) => s.feedId));
+  return { unread: Object.fromEntries(unread), saved };
+}
+
+export type SidebarCounts = Awaited<ReturnType<typeof getSidebarCounts>>;
 
 function dayKey(date: Date, timeZone: string) {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -272,26 +285,33 @@ export async function getArticle(userId: string, articleId: string) {
 
 export type ArticleDetail = NonNullable<Awaited<ReturnType<typeof getArticle>>>;
 
-/** Título do escopo; os fixos vêm traduzidos em `labels` (articles.scopes.*). */
-export async function scopeTitle(
+/**
+ * Título do escopo (null = escopo inexistente para o usuário) e, num feed, o último erro de
+ * atualização, na mesma consulta. Os títulos fixos vêm traduzidos em `labels` (articles.scopes.*).
+ */
+export async function scopeHeader(
   userId: string,
   scope: ArticleScope,
   labels: { today: string; all: string; saved: string },
-): Promise<string | null> {
+): Promise<{ title: string; lastError: string | null } | null> {
   switch (scope.kind) {
     case "today":
-      return labels.today;
+      return { title: labels.today, lastError: null };
     case "all":
-      return labels.all;
+      return { title: labels.all, lastError: null };
     case "saved":
-      return scope.tag ? `${labels.saved} · ${scope.tag}` : labels.saved;
+      return { title: scope.tag ? `${labels.saved} · ${scope.tag}` : labels.saved, lastError: null };
     case "feed": {
-      const sub = await db.subscription.findFirst({ where: { userId, feedId: scope.feedId }, include: { feed: true } });
-      return sub ? (sub.customTitle ?? sub.feed.title) : null;
+      const sub = await db.subscription.findFirst({
+        where: { userId, feedId: scope.feedId },
+        select: { customTitle: true, feed: { select: { title: true, lastError: true, errorCount: true } } },
+      });
+      if (!sub) return null;
+      return { title: sub.customTitle ?? sub.feed.title, lastError: sub.feed.errorCount > 0 ? sub.feed.lastError : null };
     }
     case "folder": {
-      const folder = await db.folder.findFirst({ where: { id: scope.folderId, userId } });
-      return folder?.name ?? null;
+      const folder = await db.folder.findFirst({ where: { id: scope.folderId, userId }, select: { name: true } });
+      return folder ? { title: folder.name, lastError: null } : null;
     }
   }
 }

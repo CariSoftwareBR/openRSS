@@ -28,6 +28,7 @@
     "retry": "Try again"
   },
   "ui": {
+    "loading": "Loading…",
     "resizeHint": "Drag to resize · double-click to reset",
     "combobox": {
       "placeholder": "Select…",

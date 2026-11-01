@@ -6,7 +6,7 @@ import { CheckCheck, Eye, EyeOff, Loader2, RefreshCw, Search, Sparkles, Triangle
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import type { ArticleDetail, ArticleListItem, ArticleScope } from "@/lib/queries";
-import { loadMoreArticles, loadPreviewImagesAction, markAllRead, openArticleAction, setRead, setSaved } from "@/app/actions/articles";
+import { loadMoreArticles, markAllRead, openArticleAction, setRead, setSaved } from "@/app/actions/articles";
 import { refreshFeedAction } from "@/app/actions/feeds";
 import { SaveLinkDialog } from "@/components/save-link";
 import { TagFilter, type TagCount } from "./tag-filter";
@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ResizeHandle } from "@/components/ui/resize-handle";
 import { useResizableWidth } from "@/hooks/use-resizable-width";
+import { useSidebarCounts } from "@/components/sidebar-counts";
 import { ArticleList } from "./article-list";
 import { Reader } from "./reader";
 
@@ -51,6 +52,7 @@ export function ArticleWorkspace({
   const t = useTranslations("articles");
   const router = useRouter();
   const pathname = usePathname();
+  const { refreshCounts } = useSidebarCounts();
   const [items, setItems] = useState(initial.items);
   const [hasMore, setHasMore] = useState(initial.hasMore);
   const [page, setPage] = useState(0);
@@ -71,28 +73,37 @@ export function ArticleWorkspace({
 
   const selectedIndex = selected ? items.findIndex((i) => i.id === selected.id) : -1;
 
-  // Busca a imagem de capa (og:image) dos artigos cujo feed não traz imagem, em lotes.
+  // Busca a imagem de capa (og:image) dos artigos cujo feed não traz imagem, em lotes. Usa uma
+  // rota (fetch) e não server action: actions rodam uma por vez e travariam os cliques.
   const requestedImages = useRef(new Set<string>());
   const previewQueue = useRef<string[][]>([]);
   const activePreviewRequests = useRef(0);
+  const previewAbort = useRef<AbortController | null>(null);
+  useEffect(() => () => previewAbort.current?.abort(), []);
   useEffect(() => {
     const missing = items.filter((i) => !i.imageChecked && i.url && !requestedImages.current.has(i.id)).map((i) => i.id);
     if (missing.length === 0) return;
     for (const id of missing) requestedImages.current.add(id);
-    for (let i = 0; i < missing.length; i += 12) {
-      previewQueue.current.push(missing.slice(i, i + 12));
+    for (let i = 0; i < missing.length; i += 6) {
+      previewQueue.current.push(missing.slice(i, i + 6));
     }
+    previewAbort.current ??= new AbortController();
+    const signal = previewAbort.current.signal;
 
     function processPreviewQueue() {
-      while (activePreviewRequests.current < 2) {
+      while (activePreviewRequests.current < 3 && !signal.aborted) {
         const batch = previewQueue.current.shift();
         if (!batch) return;
         activePreviewRequests.current++;
-        void loadPreviewImagesAction(batch)
-          .catch(() => ({}) as Record<string, string | null>)
+        void fetch(`/api/articles/preview-images?ids=${batch.map(encodeURIComponent).join(",")}`, { signal })
+          .then((res): Promise<Record<string, string | null>> | Record<string, string | null> => (res.ok ? res.json() : {}))
+          .catch((): Record<string, string | null> => ({}))
           .then((found) => {
+            if (signal.aborted) return;
+            // O lote todo sai do estado "carregando"; falhas transitórias são tentadas de novo em outra visita.
+            const checked = new Set(batch);
             setItems((list) =>
-              list.map((item) => (Object.hasOwn(found, item.id) ? { ...item, imageUrl: found[item.id] ?? item.imageUrl, imageChecked: true } : item)),
+              list.map((item) => (checked.has(item.id) ? { ...item, imageUrl: found[item.id] ?? item.imageUrl, imageChecked: true } : item)),
             );
           })
           .finally(() => {
@@ -141,7 +152,10 @@ export function ArticleWorkspace({
       window.history.replaceState(null, "", buildUrl({ a: id }));
       try {
         const article = await openArticleAction(id);
-        if (article) patchItem(id, { isRead: true });
+        if (article) {
+          patchItem(id, { isRead: true });
+          if (!article.state?.isRead) refreshCounts();
+        }
         if (request !== openRequest.current) return;
         setLoadingId(null);
         if (!article) {
@@ -151,7 +165,6 @@ export function ArticleWorkspace({
         }
         const state = { ...(article.state ?? emptyState(article)), isRead: true, readAt: article.state?.readAt ?? new Date() };
         setSelected({ ...article, state });
-        router.refresh();
       } catch {
         if (request !== openRequest.current) return;
         setLoadingId(null);
@@ -159,7 +172,7 @@ export function ArticleWorkspace({
         toast.error(t("errors.openFailed"));
       }
     },
-    [buildUrl, patchItem, router, t],
+    [buildUrl, patchItem, refreshCounts, t],
   );
 
   const close = useCallback(() => {
@@ -204,6 +217,7 @@ export function ArticleWorkspace({
       if (selected?.id === id) setSelected((s) => (s ? { ...s, state: { ...(s.state ?? emptyState(s)), isRead } } : s));
       try {
         await persistInOrder(key, () => setRead(id, isRead));
+        refreshCounts();
       } catch {
         if (mutationRequest.current.get(key) !== request) return;
         if (previousItem && unreadOnly && isRead) {
@@ -220,7 +234,7 @@ export function ArticleWorkspace({
         toast.error(t("errors.readStateFailed"));
       }
     },
-    [items, patchItem, persistInOrder, selected, t, unreadOnly],
+    [items, patchItem, persistInOrder, refreshCounts, selected, t, unreadOnly],
   );
 
   const toggleSaved = useCallback(
@@ -249,6 +263,7 @@ export function ArticleWorkspace({
       if (selected?.id === id) setSelected((s) => (s ? { ...s, state: { ...(s.state ?? emptyState(s)), isSaved } } : s));
       try {
         await persistInOrder(key, () => setSaved(id, isSaved));
+        refreshCounts();
         toast.success(isSaved ? t("saved") : t("unsaved"));
       } catch {
         if (mutationRequest.current.get(key) !== request) return;
@@ -266,7 +281,7 @@ export function ArticleWorkspace({
         toast.error(t("errors.savedStateFailed"));
       }
     },
-    [items, patchItem, persistInOrder, scope.kind, selected, t],
+    [items, patchItem, persistInOrder, refreshCounts, scope.kind, selected, t],
   );
 
   const doMarkAll = useCallback(() => {
@@ -283,14 +298,13 @@ export function ArticleWorkspace({
       try {
         const { count, nextFeedId } = await markAllRead(scope);
         toast.success(count ? t("markedRead", { count }) : t("nothingToMark"));
+        if (count) refreshCounts();
         if (nextFeedId) {
           const params = new URLSearchParams(window.location.search);
           params.delete("a");
           params.delete("q");
           const qs = params.toString();
           router.push(qs ? `/feed/${nextFeedId}?${qs}` : `/feed/${nextFeedId}`);
-        } else {
-          router.refresh();
         }
       } catch {
         setItems(previousItems);
@@ -300,7 +314,7 @@ export function ArticleWorkspace({
         toast.error(t("errors.markAllFailed"));
       }
     });
-  }, [hasMore, items, router, scope, selected, t, unreadOnly]);
+  }, [hasMore, items, refreshCounts, router, scope, selected, t, unreadOnly]);
 
   const refreshFeed = useCallback(() => {
     if (scope.kind !== "feed") return;
