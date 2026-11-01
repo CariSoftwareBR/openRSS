@@ -1016,5 +1016,35 @@
       "subject": "Teste de e-mail do openRSS",
       "body": "Se você recebeu esta mensagem, o envio de e-mails do openRSS está funcionando."
     }
+  },
+  "updates": {
+    "available": "Nova versão {version} disponível",
+    "dismiss": "Dispensar até a próxima versão",
+    "title": "openRSS {version} disponível",
+    "subtitle": "Você está na versão {current}.",
+    "subtitleDated": "Publicada em {date}. Você está na versão {current}.",
+    "close": "Fechar",
+    "whatsNew": "O que há de novo",
+    "noNotes": "Esta versão não tem notas.",
+    "viewRelease": "Ver no GitHub",
+    "updateNow": "Atualizar agora",
+    "updating": "Atualizando… o openRSS vai reiniciar e esta página recarrega sozinha.",
+    "restartSlow": "A atualização está demorando. Confira o container e recarregue a página quando ele voltar.",
+    "howDocker": "Para atualizar, rode no servidor, na pasta do docker-compose.yml:",
+    "howOneClick": "Para atualizar com um clique daqui, configure OPENRSS_UPDATE_WEBHOOK_URL (por exemplo, com o Watchtower). Veja o INSTALL.md.",
+    "howSource": "Para atualizar uma instalação a partir do código, rode e reinicie o app:",
+    "howStore": "Atualize pela loja de apps do {store}.",
+    "stores": {
+      "umbrel": "Umbrel",
+      "casaos": "CasaOS",
+      "unraid": "Unraid (Community Applications)"
+    },
+    "checkFailed": "Não foi possível verificar atualizações.",
+    "triggerFailed": "O webhook de atualização falhou. Confira OPENRSS_UPDATE_WEBHOOK_URL e o token.",
+    "versionTitle": "Versão",
+    "currentVersion": "Versão instalada: {version}",
+    "checkNow": "Verificar agora",
+    "upToDate": "Você está na versão mais recente.",
+    "checkDisabled": "A verificação automática está desligada (OPENRSS_UPDATE_CHECK=false)."
   }
 }

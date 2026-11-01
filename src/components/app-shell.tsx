@@ -49,6 +49,8 @@ import { cn } from "@/lib/utils";
 import { createFolderAction, refreshAllFeedsAction, renameFolderAction, updateSubscriptionAction } from "@/app/actions/feeds";
 import { AddFeedDialog } from "@/components/add-feed-dialog";
 import { applySidebarCounts, SidebarCountsProvider, useSidebarCounts } from "@/components/sidebar-counts";
+import { UpdateNotice } from "@/components/update-notice";
+import type { UpdateInfo } from "@/lib/updates";
 import { FeedIcon } from "@/components/feed-icon";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -71,7 +73,17 @@ function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-export function AppShell({ sidebar, user, children }: { sidebar: SidebarData; user: User; children: React.ReactNode }) {
+export function AppShell({
+  sidebar,
+  user,
+  update,
+  children,
+}: {
+  sidebar: SidebarData;
+  user: User;
+  update: UpdateInfo | null;
+  children: React.ReactNode;
+}) {
   const t = useTranslations("shell");
   const pathname = usePathname();
   // O menu mobile fica aberto só na rota em que foi aberto: navegar o fecha sem precisar de efeito.
@@ -87,7 +99,7 @@ export function AppShell({ sidebar, user, children }: { sidebar: SidebarData; us
           style={{ "--sidebar-w": `${sidebarSize.width}px` } as React.CSSProperties}
           className="relative hidden w-(--sidebar-w) shrink-0 border-r border-border bg-sidebar lg:flex"
         >
-          <SidebarContent sidebar={sidebar} user={user} />
+          <SidebarContent sidebar={sidebar} user={user} update={update} />
           <ResizeHandle label={t("resizeSidebar")} dragging={sidebarSize.dragging} {...sidebarSize.handleProps} />
         </aside>
 
@@ -104,7 +116,7 @@ export function AppShell({ sidebar, user, children }: { sidebar: SidebarData; us
                 <Dialog.Content className="fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] border-r border-border bg-sidebar shadow-card outline-none lg:hidden">
                   <Dialog.Title className="sr-only">{t("mainMenu")}</Dialog.Title>
                   <Dialog.Description className="sr-only">{t("mainMenuDescription")}</Dialog.Description>
-                  <SidebarContent sidebar={sidebar} user={user} onClose={() => setMobileOpen(false)} />
+                  <SidebarContent sidebar={sidebar} user={user} update={update} onClose={() => setMobileOpen(false)} />
                 </Dialog.Content>
               </Dialog.Portal>
             </Dialog.Root>
@@ -133,7 +145,17 @@ function moveSubscription(data: SidebarData, { subscriptionId, folderId }: Move)
   return { ...data, folders, unfiled };
 }
 
-function SidebarContent({ sidebar, user, onClose }: { sidebar: SidebarData; user: User; onClose?: () => void }) {
+function SidebarContent({
+  sidebar,
+  user,
+  update,
+  onClose,
+}: {
+  sidebar: SidebarData;
+  user: User;
+  update: UpdateInfo | null;
+  onClose?: () => void;
+}) {
   const t = useTranslations("shell");
   const router = useRouter();
   const pathname = usePathname();
@@ -392,6 +414,7 @@ function SidebarContent({ sidebar, user, onClose }: { sidebar: SidebarData; user
         )}
       </nav>
 
+      {update && <UpdateNotice update={update} />}
       <div className="flex items-center gap-2 border-t border-border px-3 py-2">
         <div className="min-w-0 flex-1">
           <p className="truncate text-xs font-medium">{user.name}</p>
