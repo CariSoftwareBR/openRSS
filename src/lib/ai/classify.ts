@@ -47,6 +47,8 @@ export async function classifyForUser(userId: string, articleIds: string[]) {
     try {
       const { output } = await generateText({
         model,
+        // Roda dentro do lock de refresh: um provedor lento não pode segurar a atualização dos feeds.
+        abortSignal: AbortSignal.timeout(90_000),
         output: Output.object({ schema }),
         instructions: `Você é um filtro de relevância para um leitor de RSS. Dê uma nota de 0 a 100 para cada artigo segundo os interesses do usuário (100 = imperdível, 0 = irrelevante). "reason" deve ter no máximo 12 palavras, em ${languageName(settings.language)}. Retorne todos os ids recebidos.
 ${languageInstruction(settings.language)}

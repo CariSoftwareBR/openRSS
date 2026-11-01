@@ -28,6 +28,7 @@
     "retry": "Try again"
   },
   "ui": {
+    "loading": "Loading…",
     "resizeHint": "Drag to resize · double-click to reset",
     "combobox": {
       "placeholder": "Select…",
@@ -184,7 +185,7 @@
     "renameFolderName": "Rename “{name}”",
     "folderRenamed": "Folder renamed to “{name}”",
     "refreshAllFeeds": "Refresh all feeds",
-    "feedsRefreshed": "{count, plural, =0 {No new articles} =1 {1 new article} other {# new articles}}",
+    "feedsRefreshing": "{count, plural, =0 {Feeds are already up to date} =1 {Refreshing 1 feed in the background…} other {Refreshing # feeds in the background…}}",
     "refreshFeedsFailed": "Could not refresh the feeds.",
     "viewSourceOnGithub": "View source on GitHub"
   },
@@ -357,6 +358,9 @@
     "manager": {
       "genericError": "Error",
       "opmlDescription": "Import subscriptions from another reader or export yours.",
+      "savedExportTitle": "Saved articles",
+      "savedExportDescription": "Download your saved articles as bookmarks (browser, Raindrop, Pocket) or JSON.",
+      "savedExportHtml": "Bookmarks (HTML)",
       "imported": "{count, plural, =1 {1 feed imported} other {# feeds imported}}",
       "importFailed": ", {count, plural, =1 {1 failed} other {# failed}}",
       "import": "Import",
@@ -670,6 +674,8 @@
       "save": "Save",
       "groupStories": "Group stories about the same event",
       "groupStoriesHint": "Shows a single item when different feeds publish the same news; reading one marks the others as read.",
+      "markReadOnScroll": "Mark as read on scroll",
+      "markReadOnScrollHint": "While scrolling the list, an article that leaves the top of the screen is marked as read.",
       "sso": "Single sign-on (SSO)",
       "ssoLinked": "Account connected to {name}.",
       "ssoNotLinked": "Connect your account to {name} to sign in without a password.",
@@ -717,7 +723,8 @@
       "passwordTooShort": "Password must have at least 8 characters.",
       "createUserFailed": "Could not create the user.",
       "ownRole": "You cannot change your own role.",
-      "ownDelete": "You cannot delete yourself."
+      "ownDelete": "You cannot delete yourself.",
+      "invalidRole": "Invalid role."
     },
     "passwordLoginDisabled": "Password sign-in is disabled (OIDC_DISABLE_PASSWORD_LOGIN): accounts are created through SSO on first sign-in.",
     "mail": {
@@ -1014,5 +1021,35 @@
       "subject": "openRSS email test",
       "body": "If you received this message, openRSS email delivery is working."
     }
+  },
+  "updates": {
+    "available": "Version {version} available",
+    "dismiss": "Dismiss until the next version",
+    "title": "openRSS {version} is available",
+    "subtitle": "You are on version {current}.",
+    "subtitleDated": "Released {date}. You are on version {current}.",
+    "close": "Close",
+    "whatsNew": "What's new",
+    "noNotes": "This release has no notes.",
+    "viewRelease": "View on GitHub",
+    "updateNow": "Update now",
+    "updating": "Updating… openRSS will restart and this page will reload by itself.",
+    "restartSlow": "The update is taking a while. Check the container and reload the page once it is back.",
+    "howDocker": "To update, run this on the server, in the docker-compose.yml folder:",
+    "howOneClick": "To update with one click from here, set OPENRSS_UPDATE_WEBHOOK_URL (for example, with Watchtower). See INSTALL.md.",
+    "howSource": "To update a source install, run this and restart the app:",
+    "howStore": "Update it from the {store} app store.",
+    "stores": {
+      "umbrel": "Umbrel",
+      "casaos": "CasaOS",
+      "unraid": "Unraid (Community Applications)"
+    },
+    "checkFailed": "Could not check for updates.",
+    "triggerFailed": "The update webhook failed. Check OPENRSS_UPDATE_WEBHOOK_URL and the token.",
+    "versionTitle": "Version",
+    "currentVersion": "Installed version: {version}",
+    "checkNow": "Check now",
+    "upToDate": "You are on the latest version.",
+    "checkDisabled": "Automatic checking is turned off (OPENRSS_UPDATE_CHECK=false)."
   }
 }

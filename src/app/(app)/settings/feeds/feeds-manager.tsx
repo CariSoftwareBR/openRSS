@@ -91,6 +91,25 @@ export function FeedsManager({ folders, subscriptions }: { folders: { id: string
         </Button>
       </Card>
 
+      <Card className="flex flex-wrap items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="font-medium">{t("savedExportTitle")}</p>
+          <p className="text-xs text-muted-foreground">{t("savedExportDescription")}</p>
+        </div>
+        <Button asChild>
+          {/* oxlint-disable-next-line nextjs/no-html-link-for-pages -- download de arquivo, não navegação entre páginas */}
+          <a href="/api/saved/export?format=html">
+            <Download /> {t("savedExportHtml")}
+          </a>
+        </Button>
+        <Button asChild>
+          {/* oxlint-disable-next-line nextjs/no-html-link-for-pages -- download de arquivo, não navegação entre páginas */}
+          <a href="/api/saved/export?format=json">
+            <Download /> JSON
+          </a>
+        </Button>
+      </Card>
+
       <section className="flex flex-col gap-3">
         <h2 className="eyebrow">{t("folders")}</h2>
         <form

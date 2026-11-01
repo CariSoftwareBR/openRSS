@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
+import { accessibleArticles } from "@/lib/article-state";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 
@@ -13,7 +14,7 @@ export async function createThreadAction(articleIds: string[] = []) {
   const user = await requireUser();
   const allowed = articleIds.length
     ? await db.article.findMany({
-        where: { id: { in: articleIds.slice(0, 20) }, feed: { subscriptions: { some: { userId: user.id } } } },
+        where: { id: { in: articleIds.slice(0, 20) }, ...accessibleArticles(user.id) },
         select: { id: true, title: true },
       })
     : [];
@@ -32,7 +33,7 @@ export async function startThreadAction(articleIds: string[] = []) {
   const user = await requireUser();
   const allowed = articleIds.length
     ? await db.article.findMany({
-        where: { id: { in: articleIds.slice(0, 20) }, feed: { subscriptions: { some: { userId: user.id } } } },
+        where: { id: { in: articleIds.slice(0, 20) }, ...accessibleArticles(user.id) },
         select: { id: true, title: true },
       })
     : [];

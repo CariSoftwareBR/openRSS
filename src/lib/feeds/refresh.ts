@@ -4,7 +4,7 @@ import { setArticleStates } from "@/lib/article-state";
 import { getAppSettings } from "@/lib/app-settings";
 import { withLock } from "@/lib/jobs/lock";
 import { LocalizedError, serializeError } from "@/lib/localized-error";
-import { safeFetch } from "./net";
+import { FetchError, safeFetch } from "./net";
 import { parseFeed, type ParsedFeed } from "./parse";
 import { assignStories } from "./stories";
 import { INGEST_UNREAD_MAX_AGE_MS, SUBSCRIBE_UNREAD_MAX_AGE_MS } from "./unread-age";
@@ -12,6 +12,27 @@ import { INGEST_UNREAD_MAX_AGE_MS, SUBSCRIBE_UNREAD_MAX_AGE_MS } from "./unread-
 export { INGEST_UNREAD_MAX_AGE_MS, SUBSCRIBE_UNREAD_MAX_AGE_MS } from "./unread-age";
 
 const MAX_BACKOFF_MIN = 24 * 60;
+/** Feeds que falham há muito tempo (ou responderam 410 Gone) são verificados só uma vez por semana. */
+const DEAD_FEED_ERRORS = 14;
+const DEAD_FEED_RETRY_MIN = 7 * 24 * 60;
+/** Teto para o Cache-Control: max-age do feed alongar o intervalo de atualização. */
+const MAX_CACHE_HINT_MIN = 2 * 60;
+
+/** Próxima busca: o intervalo configurado, ou mais se o servidor pedir (Cache-Control: max-age). */
+export function nextFetchDelayMinutes(intervalMinutes: number, cacheControl: string | null) {
+  const maxAge = Number(/(?:^|,)\s*max-age=(\d+)/i.exec(cacheControl ?? "")?.[1]);
+  const hinted = Number.isFinite(maxAge) ? Math.min(Math.ceil(maxAge / 60), MAX_CACHE_HINT_MIN) : 0;
+  return Math.max(intervalMinutes, hinted);
+}
+
+/** Espera depois de uma falha: backoff exponencial, Retry-After do servidor e pausa para feeds mortos. */
+export function failureDelayMinutes(intervalMinutes: number, errorCount: number, error: unknown) {
+  const status = error instanceof FetchError ? error.status : undefined;
+  if (status === 410 || errorCount >= DEAD_FEED_ERRORS) return DEAD_FEED_RETRY_MIN;
+  const backoff = Math.min(intervalMinutes * 2 ** errorCount, MAX_BACKOFF_MIN);
+  const retryAfter = error instanceof FetchError && error.retryAfterSec !== undefined ? Math.ceil(error.retryAfterSec / 60) : 0;
+  return Math.max(backoff, Math.min(retryAfter, MAX_BACKOFF_MIN));
+}
 
 function isUniqueConflict(error: unknown) {
   return typeof error === "object" && error !== null && "code" in error && error.code === "P2002";
@@ -23,7 +44,10 @@ type RefreshResult = { newArticleIds: string[]; error?: string };
 /** Insere artigos novos (dedupe por feedId+guid) e retorna os ids criados. */
 export async function ingestItems(feedId: string, items: ParsedFeed["items"]): Promise<string[]> {
   if (items.length === 0) return [];
-  const unique = [...new Map(items.map((i) => [i.guid, i])).values()];
+  // Itens mais antigos que a retenção ficam de fora: a limpeza noturna os apagaria e, como o XML
+  // ainda os traz, voltariam no refresh seguinte como "novos" (não lidos e novos para Fever/GReader).
+  const cutoff = await retentionCutoff();
+  const unique = [...new Map(items.filter((i) => i.publishedAt >= cutoff).map((i) => [i.guid, i])).values()];
   const created: string[] = [];
   for (const item of unique) {
     const { hasPublishDate: _hasDate, ...data } = item;
@@ -43,6 +67,24 @@ export async function ingestItems(feedId: string, items: ParsedFeed["items"]): P
   // Agrupar é acessório: uma falha aqui não pode perder os artigos já gravados.
   await assignStories(created).catch((err) => console.error("[stories]", err));
   return created;
+}
+
+/** Guids deste feed já gravados, com a data de publicação gravada. */
+async function storedGuids(feedId: string, guids: string[]) {
+  const rows = await db.article.findMany({ where: { feedId, guid: { in: guids } }, select: { guid: true, publishedAt: true } });
+  return new Map(rows.map((r) => [r.guid, r.publishedAt]));
+}
+
+/**
+ * Itens já gravados: só corrige a data quando o XML traz uma real mais antiga que a gravada
+ * (fallback "agora" ou <updated> bumpado); nunca adianta. Evita um UPDATE por item a cada refresh.
+ */
+async function fixKnownDates(feedId: string, known: ParsedFeed["known"], stored: Map<string, Date>) {
+  for (const item of known) {
+    const current = stored.get(item.guid);
+    if (!item.hasPublishDate || !current || current <= item.publishedAt) continue;
+    await db.article.updateMany({ where: { feedId, guid: item.guid }, data: { publishedAt: item.publishedAt } });
+  }
 }
 
 /** Marca como lidos, para todos os assinantes, artigos deste feed publicados há mais de 14 dias. */
@@ -97,23 +139,33 @@ async function refreshFeedUnlocked(feedId: string): Promise<RefreshResult> {
       },
     });
 
-    const next = new Date(Date.now() + refreshIntervalMinutes * 60_000);
+    const next = new Date(Date.now() + nextFetchDelayMinutes(refreshIntervalMinutes, res.headers.get("cache-control")) * 60_000);
+    // 301/308: passa a buscar no endereço novo (se nenhum outro feed já usa essa URL).
+    const movedTo = res.movedPermanently && res.url !== feed.url && !(await db.feed.findUnique({ where: { url: res.url }, select: { id: true } }))
+      ? res.url
+      : undefined;
     if (res.status === 304) {
       await db.feed.update({
         where: { id: feedId },
-        data: { lastFetchedAt: new Date(), nextFetchAt: next, errorCount: 0, lastError: null },
+        data: { url: movedTo, lastFetchedAt: new Date(), nextFetchAt: next, errorCount: 0, lastError: null },
       });
       await markStaleUnread(feedId);
       return { newArticleIds: [] };
     }
 
-    const parsed = await parseFeed(res.body, res.url);
+    let stored = new Map<string, Date>();
+    const parsed = await parseFeed(res.body, res.url, {
+      existing: async (guids) => (stored = await storedGuids(feedId, guids)),
+      skipBefore: await retentionCutoff(),
+    });
+    await fixKnownDates(feedId, parsed.known, stored);
     const createdIds = await ingestItems(feedId, parsed.items);
     await markStaleUnread(feedId);
     const newArticleIds = await freshCreatedIds(createdIds);
     await db.feed.update({
       where: { id: feedId },
       data: {
+        url: movedTo,
         title: parsed.title || feed.title,
         siteUrl: parsed.siteUrl ?? feed.siteUrl,
         description: parsed.description ?? feed.description,
@@ -130,7 +182,7 @@ async function refreshFeedUnlocked(feedId: string): Promise<RefreshResult> {
   } catch (err) {
     const message = serializeError(err);
     const errorCount = feed.errorCount + 1;
-    const backoff = Math.min(refreshIntervalMinutes * 2 ** errorCount, MAX_BACKOFF_MIN);
+    const backoff = failureDelayMinutes(refreshIntervalMinutes, errorCount, err);
     await db.feed.update({
       where: { id: feedId },
       data: {
@@ -223,9 +275,14 @@ export async function subscribe(
  * Remove artigos antigos que não foram salvos por nenhum usuário e feeds sem assinantes.
  * Feeds com artigos salvos ficam: apagar o feed apagaria os salvos em cascata.
  */
-export async function applyRetention() {
+/** Artigos publicados antes disto são removidos pela retenção (e não são mais ingeridos). */
+export async function retentionCutoff() {
   const { retentionDays } = await getAppSettings();
-  const cutoff = new Date(Date.now() - retentionDays * 86400000);
+  return new Date(Date.now() - retentionDays * 86400000);
+}
+
+export async function applyRetention() {
+  const cutoff = await retentionCutoff();
   const count = await db.$executeRaw`
     DELETE FROM "article"
     WHERE "publishedAt" < ${cutoff}

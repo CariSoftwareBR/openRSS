@@ -28,6 +28,7 @@
     "retry": "Tentar novamente"
   },
   "ui": {
+    "loading": "Carregando…",
     "resizeHint": "Arraste para redimensionar · duplo clique para restaurar",
     "combobox": {
       "placeholder": "Selecione…",
@@ -184,7 +185,7 @@
     "renameFolderName": "Renomear “{name}”",
     "folderRenamed": "Pasta renomeada para “{name}”",
     "refreshAllFeeds": "Atualizar todos os feeds",
-    "feedsRefreshed": "{count, plural, =0 {Nenhum artigo novo} =1 {1 artigo novo} other {# artigos novos}}",
+    "feedsRefreshing": "{count, plural, =0 {Os feeds já estão em dia} =1 {Atualizando 1 feed em segundo plano…} other {Atualizando # feeds em segundo plano…}}",
     "refreshFeedsFailed": "Não foi possível atualizar os feeds.",
     "viewSourceOnGithub": "Ver código no GitHub"
   },
@@ -357,6 +358,9 @@
     "manager": {
       "genericError": "Erro",
       "opmlDescription": "Importe assinaturas de outro leitor ou exporte as suas.",
+      "savedExportTitle": "Artigos salvos",
+      "savedExportDescription": "Baixe seus salvos como favoritos (navegador, Raindrop, Pocket) ou JSON.",
+      "savedExportHtml": "Favoritos (HTML)",
       "imported": "{count, plural, =1 {1 feed importado} other {# feeds importados}}",
       "importFailed": ", {count, plural, =1 {1 falhou} other {# falharam}}",
       "import": "Importar",
@@ -670,6 +674,8 @@
       "save": "Salvar",
       "groupStories": "Agrupar notícias do mesmo fato",
       "groupStoriesHint": "Mostra um único item quando feeds diferentes publicam a mesma notícia; ler uma marca as outras como lidas.",
+      "markReadOnScroll": "Marcar como lido ao rolar",
+      "markReadOnScrollHint": "Ao rolar a lista, o artigo que sai pelo topo da tela é marcado como lido.",
       "sso": "Login único (SSO)",
       "ssoLinked": "Conta conectada a {name}.",
       "ssoNotLinked": "Conecte sua conta a {name} para entrar sem senha.",
@@ -717,7 +723,8 @@
       "passwordTooShort": "Senha com no mínimo 8 caracteres.",
       "createUserFailed": "Não foi possível criar o usuário.",
       "ownRole": "Você não pode alterar seu próprio papel.",
-      "ownDelete": "Você não pode excluir a si mesmo."
+      "ownDelete": "Você não pode excluir a si mesmo.",
+      "invalidRole": "Papel inválido."
     },
     "passwordLoginDisabled": "O login por senha está desativado (OIDC_DISABLE_PASSWORD_LOGIN): as contas são criadas pelo SSO no primeiro acesso.",
     "mail": {
@@ -1014,5 +1021,35 @@
       "subject": "Teste de e-mail do openRSS",
       "body": "Se você recebeu esta mensagem, o envio de e-mails do openRSS está funcionando."
     }
+  },
+  "updates": {
+    "available": "Versão {version} disponível",
+    "dismiss": "Dispensar até a próxima versão",
+    "title": "openRSS {version} disponível",
+    "subtitle": "Você está na versão {current}.",
+    "subtitleDated": "Publicada em {date}. Você está na versão {current}.",
+    "close": "Fechar",
+    "whatsNew": "O que há de novo",
+    "noNotes": "Esta versão não tem notas.",
+    "viewRelease": "Ver no GitHub",
+    "updateNow": "Atualizar agora",
+    "updating": "Atualizando… o openRSS vai reiniciar e esta página recarrega sozinha.",
+    "restartSlow": "A atualização está demorando. Confira o container e recarregue a página quando ele voltar.",
+    "howDocker": "Para atualizar, rode no servidor, na pasta do docker-compose.yml:",
+    "howOneClick": "Para atualizar com um clique daqui, configure OPENRSS_UPDATE_WEBHOOK_URL (por exemplo, com o Watchtower). Veja o INSTALL.md.",
+    "howSource": "Para atualizar uma instalação a partir do código, rode e reinicie o app:",
+    "howStore": "Atualize pela loja de apps do {store}.",
+    "stores": {
+      "umbrel": "Umbrel",
+      "casaos": "CasaOS",
+      "unraid": "Unraid (Community Applications)"
+    },
+    "checkFailed": "Não foi possível verificar atualizações.",
+    "triggerFailed": "O webhook de atualização falhou. Confira OPENRSS_UPDATE_WEBHOOK_URL e o token.",
+    "versionTitle": "Versão",
+    "currentVersion": "Versão instalada: {version}",
+    "checkNow": "Verificar agora",
+    "upToDate": "Você está na versão mais recente.",
+    "checkDisabled": "A verificação automática está desligada (OPENRSS_UPDATE_CHECK=false)."
   }
 }

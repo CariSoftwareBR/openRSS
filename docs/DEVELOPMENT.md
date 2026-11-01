@@ -87,3 +87,11 @@ DATABASE_PROVIDER=postgresql DATABASE_URL=postgresql://user:pass@localhost:5432/
 ## Stack
 
 Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · Prisma 7 (SQLite / PostgreSQL via driver adapters) · Better Auth · AI SDK 7.
+
+## Publicando uma versão
+
+O aviso de nova versão compara a `version` do `package.json` com a última release do GitHub. Antes de criar a tag:
+
+1. Atualize a versão: `npm version <x.y.z> --no-git-tag-version` (muda `package.json` e `package-lock.json`).
+2. Faça o merge na `main`, crie a tag `v<x.y.z>` e publique a release com as notas: elas aparecem no "O que há de novo".
+3. O workflow Docker publica `x.y.z`, `x.y` e `latest`.

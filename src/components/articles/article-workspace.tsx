@@ -5,8 +5,8 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { CheckCheck, Eye, EyeOff, Loader2, RefreshCw, Search, Sparkles, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
-import type { ArticleDetail, ArticleListItem, ArticleScope } from "@/lib/queries";
-import { loadMoreArticles, loadPreviewImagesAction, markAllRead, openArticleAction, setRead, setSaved } from "@/app/actions/articles";
+import type { ArticleDetail, ArticleListItem, ArticleScope, ListCursor } from "@/lib/queries";
+import { loadMoreArticles, markAllRead, markReadMany, openArticleAction, setRead, setSaved } from "@/app/actions/articles";
 import { refreshFeedAction } from "@/app/actions/feeds";
 import { SaveLinkDialog } from "@/components/save-link";
 import { TagFilter, type TagCount } from "./tag-filter";
@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ResizeHandle } from "@/components/ui/resize-handle";
 import { useResizableWidth } from "@/hooks/use-resizable-width";
+import { useSidebarCounts } from "@/components/sidebar-counts";
 import { ArticleList } from "./article-list";
 import { Reader } from "./reader";
 
@@ -34,10 +35,11 @@ export function ArticleWorkspace({
   ttsEnabled,
   feedError,
   tagFilter,
+  markReadOnScroll = false,
 }: {
   scope: ArticleScope;
   title: string;
-  initial: { items: ArticleListItem[]; hasMore: boolean };
+  initial: { items: ArticleListItem[]; hasMore: boolean; nextCursor: ListCursor | null };
   unreadOnly: boolean;
   query?: string;
   initialArticle: ArticleDetail | null;
@@ -47,13 +49,16 @@ export function ArticleWorkspace({
   ttsEnabled: boolean;
   feedError: string | null;
   tagFilter: { tags: TagCount[]; active: string | undefined } | null;
+  /** Marca como lido o artigo que sai pelo topo da lista ao rolar (Configurações → Geral). */
+  markReadOnScroll?: boolean;
 }) {
   const t = useTranslations("articles");
   const router = useRouter();
   const pathname = usePathname();
+  const { refreshCounts } = useSidebarCounts();
   const [items, setItems] = useState(initial.items);
   const [hasMore, setHasMore] = useState(initial.hasMore);
-  const [page, setPage] = useState(0);
+  const [cursor, setCursor] = useState<ListCursor | null>(initial.nextCursor);
   const [selected, setSelected] = useState<ArticleDetail | null>(initialArticle);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [view, setView] = useState<ListView>(initialView);
@@ -71,28 +76,41 @@ export function ArticleWorkspace({
 
   const selectedIndex = selected ? items.findIndex((i) => i.id === selected.id) : -1;
 
-  // Busca a imagem de capa (og:image) dos artigos cujo feed não traz imagem, em lotes.
+  // Busca a imagem de capa (og:image) dos artigos cujo feed não traz imagem, em lotes. Usa uma
+  // rota (fetch) e não server action: actions rodam uma por vez e travariam os cliques.
   const requestedImages = useRef(new Set<string>());
   const previewQueue = useRef<string[][]>([]);
   const activePreviewRequests = useRef(0);
+  // Ao sair da página, a fila para; os lotes em andamento terminam (e gravam a capa no servidor).
+  // Sem AbortController: no StrictMode o desmonte simulado cancelaria os lotes recém-iniciados.
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   useEffect(() => {
     const missing = items.filter((i) => !i.imageChecked && i.url && !requestedImages.current.has(i.id)).map((i) => i.id);
     if (missing.length === 0) return;
     for (const id of missing) requestedImages.current.add(id);
-    for (let i = 0; i < missing.length; i += 12) {
-      previewQueue.current.push(missing.slice(i, i + 12));
+    for (let i = 0; i < missing.length; i += 6) {
+      previewQueue.current.push(missing.slice(i, i + 6));
     }
-
     function processPreviewQueue() {
-      while (activePreviewRequests.current < 2) {
+      while (activePreviewRequests.current < 3 && mounted.current) {
         const batch = previewQueue.current.shift();
         if (!batch) return;
         activePreviewRequests.current++;
-        void loadPreviewImagesAction(batch)
-          .catch(() => ({}) as Record<string, string | null>)
+        void fetch(`/api/articles/preview-images?ids=${batch.map(encodeURIComponent).join(",")}`)
+          .then((res): Promise<Record<string, string | null>> | Record<string, string | null> => (res.ok ? res.json() : {}))
+          .catch((): Record<string, string | null> => ({}))
           .then((found) => {
+            if (!mounted.current) return;
+            // O lote todo sai do estado "carregando"; falhas transitórias são tentadas de novo em outra visita.
+            const checked = new Set(batch);
             setItems((list) =>
-              list.map((item) => (Object.hasOwn(found, item.id) ? { ...item, imageUrl: found[item.id] ?? item.imageUrl, imageChecked: true } : item)),
+              list.map((item) => (checked.has(item.id) ? { ...item, imageUrl: found[item.id] ?? item.imageUrl, imageChecked: true } : item)),
             );
           })
           .finally(() => {
@@ -141,7 +159,10 @@ export function ArticleWorkspace({
       window.history.replaceState(null, "", buildUrl({ a: id }));
       try {
         const article = await openArticleAction(id);
-        if (article) patchItem(id, { isRead: true });
+        if (article) {
+          patchItem(id, { isRead: true });
+          if (!article.state?.isRead) refreshCounts();
+        }
         if (request !== openRequest.current) return;
         setLoadingId(null);
         if (!article) {
@@ -151,7 +172,6 @@ export function ArticleWorkspace({
         }
         const state = { ...(article.state ?? emptyState(article)), isRead: true, readAt: article.state?.readAt ?? new Date() };
         setSelected({ ...article, state });
-        router.refresh();
       } catch {
         if (request !== openRequest.current) return;
         setLoadingId(null);
@@ -159,7 +179,7 @@ export function ArticleWorkspace({
         toast.error(t("errors.openFailed"));
       }
     },
-    [buildUrl, patchItem, router, t],
+    [buildUrl, patchItem, refreshCounts, t],
   );
 
   const close = useCallback(() => {
@@ -204,6 +224,7 @@ export function ArticleWorkspace({
       if (selected?.id === id) setSelected((s) => (s ? { ...s, state: { ...(s.state ?? emptyState(s)), isRead } } : s));
       try {
         await persistInOrder(key, () => setRead(id, isRead));
+        refreshCounts();
       } catch {
         if (mutationRequest.current.get(key) !== request) return;
         if (previousItem && unreadOnly && isRead) {
@@ -220,7 +241,7 @@ export function ArticleWorkspace({
         toast.error(t("errors.readStateFailed"));
       }
     },
-    [items, patchItem, persistInOrder, selected, t, unreadOnly],
+    [items, patchItem, persistInOrder, refreshCounts, selected, t, unreadOnly],
   );
 
   const toggleSaved = useCallback(
@@ -249,6 +270,7 @@ export function ArticleWorkspace({
       if (selected?.id === id) setSelected((s) => (s ? { ...s, state: { ...(s.state ?? emptyState(s)), isSaved } } : s));
       try {
         await persistInOrder(key, () => setSaved(id, isSaved));
+        refreshCounts();
         toast.success(isSaved ? t("saved") : t("unsaved"));
       } catch {
         if (mutationRequest.current.get(key) !== request) return;
@@ -266,7 +288,7 @@ export function ArticleWorkspace({
         toast.error(t("errors.savedStateFailed"));
       }
     },
-    [items, patchItem, persistInOrder, scope.kind, selected, t],
+    [items, patchItem, persistInOrder, refreshCounts, scope.kind, selected, t],
   );
 
   const doMarkAll = useCallback(() => {
@@ -283,14 +305,13 @@ export function ArticleWorkspace({
       try {
         const { count, nextFeedId } = await markAllRead(scope);
         toast.success(count ? t("markedRead", { count }) : t("nothingToMark"));
+        if (count) refreshCounts();
         if (nextFeedId) {
           const params = new URLSearchParams(window.location.search);
           params.delete("a");
           params.delete("q");
           const qs = params.toString();
           router.push(qs ? `/feed/${nextFeedId}?${qs}` : `/feed/${nextFeedId}`);
-        } else {
-          router.refresh();
         }
       } catch {
         setItems(previousItems);
@@ -300,7 +321,7 @@ export function ArticleWorkspace({
         toast.error(t("errors.markAllFailed"));
       }
     });
-  }, [hasMore, items, router, scope, selected, t, unreadOnly]);
+  }, [hasMore, items, refreshCounts, router, scope, selected, t, unreadOnly]);
 
   const refreshFeed = useCallback(() => {
     if (scope.kind !== "feed") return;
@@ -313,10 +334,10 @@ export function ArticleWorkspace({
           toast.error(res.error);
           return;
         }
-        const fresh = await loadMoreArticles(scope, 0, unreadOnly, query);
+        const fresh = await loadMoreArticles(scope, null, unreadOnly, query);
         setItems(fresh.items);
         setHasMore(fresh.hasMore);
-        setPage(0);
+        setCursor(fresh.nextCursor);
         toast.success(res.added ? t("newArticles", { count: res.added }) : t("noNewArticles"));
         router.refresh();
       } catch {
@@ -331,15 +352,85 @@ export function ArticleWorkspace({
     loadingMoreRef.current = true;
     startLoadMore(async () => {
       try {
-        const next = await loadMoreArticles(scope, page + 1, unreadOnly, query);
+        const next = await loadMoreArticles(scope, cursor, unreadOnly, query);
         setItems((list) => [...list, ...next.items.filter((n) => !list.some((i) => i.id === n.id))]);
         setHasMore(next.hasMore);
-        setPage((p) => p + 1);
+        setCursor(next.nextCursor);
       } finally {
         loadingMoreRef.current = false;
       }
     });
   }
+
+  // Rolagem infinita: carrega a próxima página antes de chegar ao fim (o botão continua de reserva).
+  const listRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const loadMoreRef = useRef(loadMore);
+  useEffect(() => {
+    loadMoreRef.current = loadMore;
+  });
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!hasMore || !sentinel) return;
+    const observer = new IntersectionObserver((entries) => entries.some((e) => e.isIntersecting) && loadMoreRef.current(), {
+      root: listRef.current,
+      rootMargin: "0px 0px 800px 0px",
+    });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, items.length]);
+
+  // Marcar como lido ao rolar: o artigo que sai inteiro pelo topo da lista vira lido (em lote).
+  const listLayout = selected ? "list" : "cards";
+  const pendingScrollReads = useRef(new Set<string>());
+  const scrollReadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flushScrollReads = useCallback(() => {
+    const ids = [...pendingScrollReads.current];
+    pendingScrollReads.current.clear();
+    if (ids.length === 0) return;
+    void markReadMany(ids)
+      .then(() => refreshCounts())
+      .catch(() => {
+        // Falhou: volta a mostrar como não lidos.
+        const failed = new Set(ids);
+        setItems((list) => list.map((i) => (failed.has(i.id) ? { ...i, isRead: false } : i)));
+      });
+  }, [refreshCounts]);
+  useEffect(() => () => {
+    if (scrollReadTimer.current) clearTimeout(scrollReadTimer.current);
+    flushScrollReads();
+  }, [flushScrollReads]);
+  useEffect(() => {
+    const root = listRef.current;
+    if (!markReadOnScroll || !root) return;
+    const unread = new Set(items.filter((i) => !i.isRead).map((i) => i.id));
+    if (unread.size === 0) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const passed: string[] = [];
+        for (const entry of entries) {
+          // Lista escondida (leitor aberto em telas menores que xl): retângulos zerados não são rolagem.
+          if (!entry.rootBounds || entry.rootBounds.height === 0 || entry.boundingClientRect.height === 0) continue;
+          const id = (entry.target as HTMLElement).dataset.articleId;
+          // Saiu por cima (não por baixo, ao rolar de volta) e ainda não lido.
+          if (id && !entry.isIntersecting && entry.rootBounds && entry.boundingClientRect.bottom <= entry.rootBounds.top && unread.has(id)) {
+            passed.push(id);
+          }
+        }
+        if (passed.length === 0) return;
+        for (const id of passed) pendingScrollReads.current.add(id);
+        const done = new Set(passed);
+        setItems((list) => list.map((i) => (done.has(i.id) ? { ...i, isRead: true } : i)));
+        if (scrollReadTimer.current) clearTimeout(scrollReadTimer.current);
+        scrollReadTimer.current = setTimeout(flushScrollReads, 800);
+      },
+      { root, threshold: 0 },
+    );
+    for (const el of root.querySelectorAll<HTMLElement>("[data-article-id]")) {
+      if (unread.has(el.dataset.articleId!)) observer.observe(el);
+    }
+    return () => observer.disconnect();
+  }, [flushScrollReads, items, markReadOnScroll, view, listLayout]);
 
   // Atalhos de teclado
   useEffect(() => {
@@ -462,7 +553,7 @@ export function ArticleWorkspace({
           )}
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto">
           {items.length === 0 ? (
             <p className="px-4 py-16 text-center text-sm text-muted-foreground">{empty}</p>
           ) : (
@@ -480,7 +571,7 @@ export function ArticleWorkspace({
                 onToggleSaved={toggleSaved}
               />
               {hasMore && (
-                <div className="p-4">
+                <div ref={sentinelRef} className="p-4">
                   <Button className="w-full" onClick={loadMore} disabled={loadingMore}>
                     {loadingMore ? <Loader2 className="animate-spin" /> : t("loadMore")}
                   </Button>

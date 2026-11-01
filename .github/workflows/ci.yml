@@ -25,7 +25,46 @@ jobs:
         run: npm run db:generate
       - name: Verify generated schemas are current
         run: git diff --exit-code -- prisma/sqlite/schema.prisma prisma/postgres/schema.prisma
+      - name: Verify SQLite migrations match the schema
+        env:
+          DATABASE_PROVIDER: sqlite
+          DATABASE_URL: file:/tmp/ci-drift.db
+        run: |
+          npx prisma migrate deploy
+          npx prisma migrate diff --from-config-datasource --to-schema prisma/sqlite/schema.prisma --exit-code
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  # As migrations do PostgreSQL são escritas à parte: aplica todas num banco real e confere
+  # que o resultado bate com prisma/postgres/schema.prisma (sem drift).
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: openrss
+          POSTGRES_PASSWORD: openrss
+          POSTGRES_DB: openrss
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U openrss"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_PROVIDER: postgresql
+      DATABASE_URL: postgresql://openrss:openrss@localhost:5432/openrss
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx prisma migrate deploy
+      - name: Verify PostgreSQL migrations match the schema
+        run: npx prisma migrate diff --from-config-datasource --to-schema prisma/postgres/schema.prisma --exit-code

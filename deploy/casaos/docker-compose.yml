@@ -8,6 +8,8 @@ services:
       PUID: $PUID
       PGID: $PGID
       DATABASE_URL: file:/data/openrss.db
+      # O aviso de nova versão indica atualizar pela loja do CasaOS.
+      OPENRSS_INSTALL_METHOD: casaos
     ports:
       - target: 3000
         published: "8285"

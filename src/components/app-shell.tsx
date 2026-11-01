@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useOptimistic, useRef, useState, useTransition } from "react";
+import { useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -48,6 +48,9 @@ import { postToServiceWorker } from "@/components/service-worker";
 import { cn } from "@/lib/utils";
 import { createFolderAction, refreshAllFeedsAction, renameFolderAction, updateSubscriptionAction } from "@/app/actions/feeds";
 import { AddFeedDialog } from "@/components/add-feed-dialog";
+import { applySidebarCounts, SidebarCountsProvider, useSidebarCounts } from "@/components/sidebar-counts";
+import { UpdateNotice } from "@/components/update-notice";
+import type { UpdateInfo } from "@/lib/updates";
 import { FeedIcon } from "@/components/feed-icon";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -70,7 +73,17 @@ function GithubIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-export function AppShell({ sidebar, user, children }: { sidebar: SidebarData; user: User; children: React.ReactNode }) {
+export function AppShell({
+  sidebar,
+  user,
+  update,
+  children,
+}: {
+  sidebar: SidebarData;
+  user: User;
+  update: UpdateInfo | null;
+  children: React.ReactNode;
+}) {
   const t = useTranslations("shell");
   const pathname = usePathname();
   // O menu mobile fica aberto só na rota em que foi aberto: navegar o fecha sem precisar de efeito.
@@ -80,39 +93,41 @@ export function AppShell({ sidebar, user, children }: { sidebar: SidebarData; us
   const sidebarSize = useResizableWidth("openrss:sidebar-width", { defaultWidth: 256, min: 200, max: 520 });
 
   return (
-    <div className="flex h-dvh overflow-hidden">
-      <aside
-        style={{ "--sidebar-w": `${sidebarSize.width}px` } as React.CSSProperties}
-        className="relative hidden w-(--sidebar-w) shrink-0 border-r border-border bg-sidebar lg:flex"
-      >
-        <SidebarContent sidebar={sidebar} user={user} />
-        <ResizeHandle label={t("resizeSidebar")} dragging={sidebarSize.dragging} {...sidebarSize.handleProps} />
-      </aside>
+    <SidebarCountsProvider sidebar={sidebar}>
+      <div className="flex h-dvh overflow-hidden">
+        <aside
+          style={{ "--sidebar-w": `${sidebarSize.width}px` } as React.CSSProperties}
+          className="relative hidden w-(--sidebar-w) shrink-0 border-r border-border bg-sidebar lg:flex"
+        >
+          <SidebarContent sidebar={sidebar} user={user} update={update} />
+          <ResizeHandle label={t("resizeSidebar")} dragging={sidebarSize.dragging} {...sidebarSize.handleProps} />
+        </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex h-12 items-center gap-2 border-b border-border px-3 lg:hidden">
-          <Dialog.Root open={mobileOpen} onOpenChange={setMobileOpen}>
-            <Dialog.Trigger asChild>
-              <Button variant="ghost" size="icon-sm" aria-label={t("openMenu")}>
-                <Menu />
-              </Button>
-            </Dialog.Trigger>
-            <Dialog.Portal>
-              <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40 lg:hidden" />
-              <Dialog.Content className="fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] border-r border-border bg-sidebar shadow-card outline-none lg:hidden">
-                <Dialog.Title className="sr-only">{t("mainMenu")}</Dialog.Title>
-                <Dialog.Description className="sr-only">{t("mainMenuDescription")}</Dialog.Description>
-                <SidebarContent sidebar={sidebar} user={user} onClose={() => setMobileOpen(false)} />
-              </Dialog.Content>
-            </Dialog.Portal>
-          </Dialog.Root>
-          <span className="flex items-center gap-1.5 font-semibold">
-            <Rss className="size-4 text-primary" /> openRSS
-          </span>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex h-12 items-center gap-2 border-b border-border px-3 lg:hidden">
+            <Dialog.Root open={mobileOpen} onOpenChange={setMobileOpen}>
+              <Dialog.Trigger asChild>
+                <Button variant="ghost" size="icon-sm" aria-label={t("openMenu")}>
+                  <Menu />
+                </Button>
+              </Dialog.Trigger>
+              <Dialog.Portal>
+                <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40 lg:hidden" />
+                <Dialog.Content className="fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] border-r border-border bg-sidebar shadow-card outline-none lg:hidden">
+                  <Dialog.Title className="sr-only">{t("mainMenu")}</Dialog.Title>
+                  <Dialog.Description className="sr-only">{t("mainMenuDescription")}</Dialog.Description>
+                  <SidebarContent sidebar={sidebar} user={user} update={update} onClose={() => setMobileOpen(false)} />
+                </Dialog.Content>
+              </Dialog.Portal>
+            </Dialog.Root>
+            <span className="flex items-center gap-1.5 font-semibold">
+              <Rss className="size-4 text-primary" /> openRSS
+            </span>
+          </div>
+          <main className="min-h-0 flex-1">{children}</main>
         </div>
-        <main className="min-h-0 flex-1">{children}</main>
       </div>
-    </div>
+    </SidebarCountsProvider>
   );
 }
 
@@ -130,7 +145,17 @@ function moveSubscription(data: SidebarData, { subscriptionId, folderId }: Move)
   return { ...data, folders, unfiled };
 }
 
-function SidebarContent({ sidebar, user, onClose }: { sidebar: SidebarData; user: User; onClose?: () => void }) {
+function SidebarContent({
+  sidebar,
+  user,
+  update,
+  onClose,
+}: {
+  sidebar: SidebarData;
+  user: User;
+  update: UpdateInfo | null;
+  onClose?: () => void;
+}) {
   const t = useTranslations("shell");
   const router = useRouter();
   const pathname = usePathname();
@@ -140,7 +165,10 @@ function SidebarContent({ sidebar, user, onClose }: { sidebar: SidebarData; user
   const [refreshingAll, startRefreshAll] = useTransition();
 
   // Arrastar e soltar feeds entre pastas (com atualização otimista).
-  const [data, applyMove] = useOptimistic(sidebar, moveSubscription);
+  const [optimistic, applyMove] = useOptimistic(sidebar, moveSubscription);
+  // Contadores buscados depois de abrir/marcar/salvar um artigo (sem revalidar a página toda).
+  const { counts, refreshCounts } = useSidebarCounts();
+  const data = useMemo(() => applySidebarCounts(optimistic, counts), [optimistic, counts]);
   const [, startMove] = useTransition();
   const [dragging, setDragging] = useState<SidebarSub | null>(null);
   const expandTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -202,8 +230,9 @@ function SidebarContent({ sidebar, user, onClose }: { sidebar: SidebarData; user
     startRefreshAll(async () => {
       const res = await refreshAllFeedsAction();
       if (res.ok) {
-        toast.success(t("feedsRefreshed", { count: res.added }));
-        router.refresh();
+        toast.success(t("feedsRefreshing", { count: res.queued }));
+        // A atualização roda no servidor depois da resposta: os contadores sobem conforme chegam artigos.
+        if (res.queued) for (const delay of [3000, 10000, 25000, 60000]) setTimeout(refreshCounts, delay);
       } else {
         toast.error(res.error || t("refreshFeedsFailed"));
       }
@@ -385,6 +414,7 @@ function SidebarContent({ sidebar, user, onClose }: { sidebar: SidebarData; user
         )}
       </nav>
 
+      {update && <UpdateNotice update={update} />}
       <div className="flex items-center gap-2 border-t border-border px-3 py-2">
         <div className="min-w-0 flex-1">
           <p className="truncate text-xs font-medium">{user.name}</p>

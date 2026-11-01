@@ -24,6 +24,7 @@ const schema = z.object({
   timezone: z.string().refine((tz) => Intl.supportedValuesOf("timeZone").includes(tz) || tz === "UTC", "invalidTimezone").optional(),
   listView: z.enum(["cards", "grid", "titles"]).optional(),
   groupStories: z.boolean().optional(),
+  markReadOnScroll: z.boolean().optional(),
 });
 
 export async function updateSettingsAction(input: z.input<typeof schema>) {

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { getLocale } from "next-intl/server";
 import { z } from "zod";
+import { accessibleArticles } from "@/lib/article-state";
 import { db } from "@/lib/db";
 import { getApiUser } from "@/lib/session";
 import { articleText, errorMessage } from "@/lib/ai/content";
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
   const parsed = body.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return new Response("Bad request", { status: 400 });
   const article = await db.article.findFirst({
-    where: { id: parsed.data.articleId, feed: { subscriptions: { some: { userId: user.id } } } },
+    where: { id: parsed.data.articleId, ...accessibleArticles(user.id) },
   });
   if (!article) return new Response("Not found", { status: 404 });
 

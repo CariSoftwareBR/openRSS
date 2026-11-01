@@ -1,6 +1,7 @@
 import { streamText } from "ai";
 import { getLocale } from "next-intl/server";
 import { z } from "zod";
+import { accessibleArticles } from "@/lib/article-state";
 import { db } from "@/lib/db";
 import { getApiUser } from "@/lib/session";
 import { getUserSettings } from "@/lib/app-settings";
@@ -18,7 +19,7 @@ export async function POST(request: Request) {
   const { articleId, force } = parsed.data;
 
   const article = await db.article.findFirst({
-    where: { id: articleId, feed: { subscriptions: { some: { userId: user.id } } } },
+    where: { id: articleId, ...accessibleArticles(user.id) },
   });
   if (!article) return new Response("Not found", { status: 404 });
 

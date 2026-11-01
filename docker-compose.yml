@@ -36,8 +36,32 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-}
       DISABLE_SCHEDULER: ${DISABLE_SCHEDULER:-false}
+      # Cópia semanal do SQLite em /data/backups (mantém as 3 últimas).
+      OPENRSS_SQLITE_BACKUP: ${OPENRSS_SQLITE_BACKUP:-false}
+      # Aviso de nova versão para admins (consulta as releases do GitHub a cada 12 h).
+      OPENRSS_UPDATE_CHECK: ${OPENRSS_UPDATE_CHECK:-true}
+      # Botão "Atualizar agora": webhook que baixa a imagem nova e reinicia (ex.: Watchtower abaixo).
+      OPENRSS_UPDATE_WEBHOOK_URL: ${OPENRSS_UPDATE_WEBHOOK_URL:-}
+      OPENRSS_UPDATE_WEBHOOK_TOKEN: ${OPENRSS_UPDATE_WEBHOOK_TOKEN:-}
     volumes:
       - openrss-data:/data
+
+  # Atualização com um clique (opcional). Use a imagem publicada no lugar do build local
+  # (image: ghcr.io/carisoftwarebr/openrss:latest) e defina no .env:
+  #   OPENRSS_UPDATE_WEBHOOK_URL=http://watchtower:8080/v1/update
+  #   OPENRSS_UPDATE_WEBHOOK_TOKEN=<um segredo qualquer>
+  # watchtower:
+  #   image: nickfedor/watchtower
+  #   restart: unless-stopped
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   environment:
+  #     WATCHTOWER_HTTP_API_UPDATE: "true"
+  #     WATCHTOWER_HTTP_API_TOKEN: ${OPENRSS_UPDATE_WEBHOOK_TOKEN}
+  #     WATCHTOWER_LABEL_ENABLE: "true"
+  # E no serviço openrss:
+  #   labels:
+  #     - com.centurylinklabs.watchtower.enable=true
 
 volumes:
   openrss-data:

@@ -19,6 +19,7 @@ export default async function GeneralSettingsPage() {
       timezone={settings.timezone}
       listView={normalizeListView(settings.listView)}
       groupStories={settings.groupStories}
+      markReadOnScroll={settings.markReadOnScroll}
       sso={oidc ? { name: oidc.name, linked } : null}
       timezones={Intl.supportedValuesOf("timeZone")}
     />

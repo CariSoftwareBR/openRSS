@@ -14,6 +14,8 @@ services:
     environment:
       # SQLite in the data folder; skips the first-run database wizard.
       DATABASE_URL: file:/data/openrss.db
+      # The new-version notice points to the Umbrel app store.
+      OPENRSS_INSTALL_METHOD: umbrel
       BETTER_AUTH_URL: http://${DEVICE_DOMAIN_NAME}:${APP_OPENRSS_PORT}
       # Sign-in from the .local URL over HTTPS, the device hostname, Tailscale and the device IPs.
       BETTER_AUTH_TRUSTED_ORIGINS: https://${DEVICE_DOMAIN_NAME}:${APP_OPENRSS_PORT},http://${DEVICE_HOSTNAME}:${APP_OPENRSS_PORT},http://*.ts.net:${APP_OPENRSS_PORT},https://*.ts.net:${APP_OPENRSS_PORT},${APP_OPENRSS_LOCAL_URLS}

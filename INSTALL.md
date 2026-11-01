@@ -165,6 +165,19 @@ docker compose up -d --build
 
 Migrations run automatically on start. Data in the `openrss-data` volume is kept.
 
+### New-version notice and one-click update
+
+Admins see a notice in the sidebar when a new release is published, with the release notes. openRSS checks GitHub at most every 12 hours, in the background; set `OPENRSS_UPDATE_CHECK=false` to turn it off. You can also check by hand in **Settings → Admin → Version**.
+
+A container cannot replace its own image, so the **Update now** button calls a webhook that does it for you. With [Watchtower](https://github.com/nicholas-fedor/watchtower) (HTTP API mode), use the commented example at the end of `docker-compose.yml` and set:
+
+```bash
+OPENRSS_UPDATE_WEBHOOK_URL=http://watchtower:8080/v1/update
+OPENRSS_UPDATE_WEBHOOK_TOKEN=<any secret, the same as WATCHTOWER_HTTP_API_TOKEN>
+```
+
+Without a webhook, the notice shows the command to run. On Umbrel, CasaOS and Unraid, update from the app store.
+
 ---
 
 ## Configuration
@@ -187,6 +200,10 @@ to `docker-compose.yml` and run `docker compose up -d` again.
 | `ALLOW_PRIVATE_FEEDS` | `false` | Allow feeds on private/localhost IPs (e.g. RSS-Bridge) |
 | `ALLOW_PRIVATE_WEBHOOKS` | `false` | Allow rule notifications to private/localhost IPs (e.g. ntfy on your LAN) |
 | `DISABLE_SCHEDULER` | `false` | Disable the internal scheduler |
+| `OPENRSS_SQLITE_BACKUP` | `false` | Weekly compact copy of the SQLite database in `<data>/backups` (keeps the last 3) |
+| `OPENRSS_UPDATE_CHECK` | `true` | New-version notice for admins (checks GitHub releases every 12 h) |
+| `OPENRSS_UPDATE_WEBHOOK_URL` | — | Webhook called by **Update now** (e.g. Watchtower `/v1/update`) |
+| `OPENRSS_UPDATE_WEBHOOK_TOKEN` | — | Sent as `Authorization: Bearer <token>` to the webhook |
 
 </details>
 

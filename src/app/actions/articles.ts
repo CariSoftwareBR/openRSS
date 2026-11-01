@@ -1,16 +1,12 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { getLocale, getTranslations } from "next-intl/server";
+import { getTranslations } from "next-intl/server";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
-import { extractFullContent } from "@/lib/feeds/extract";
-import { findPreviewImage } from "@/lib/feeds/preview-image";
-import { sanitizeArticleHtml } from "@/lib/feeds/sanitize";
-import { localizeError } from "@/lib/localized-error";
-import { markStorySiblingsRead } from "@/lib/article-state";
+import { markStorySiblingsRead, setArticleStates } from "@/lib/article-state";
 import { nextUnreadFeedId, orderedSidebarFeeds } from "@/lib/feeds/next-unread";
-import { articleScopeWhere, getArticle, getSidebarData, listArticles, type ArticleScope } from "@/lib/queries";
+import { articleScopeWhere, getArticle, getSidebarData, listArticles, type ArticleScope, type ListCursor } from "@/lib/queries";
 
 /** Carrega o artigo para o leitor e marca como lido. */
 export async function openArticleAction(articleId: string) {
@@ -47,7 +43,17 @@ export async function setRead(articleId: string, isRead: boolean) {
     update: { isRead, readAt: isRead ? new Date() : null },
   });
   if (isRead) await markStorySiblingsRead(user.id, articleId);
-  revalidatePath("/", "layout");
+  // Sem revalidatePath: a lista já está atualizada no cliente e a barra lateral busca só os
+  // contadores (/api/sidebar/counts). Revalidar remontava a página inteira a cada clique.
+}
+
+/** Marca vários como lidos de uma vez (rolagem da lista). Ignora ids sem acesso. */
+export async function markReadMany(articleIds: string[]) {
+  const user = await requireUser();
+  const ids = articleIds.filter((id) => typeof id === "string").slice(0, 200);
+  await setArticleStates(user.id, ids, { isRead: true });
+  // Como em setRead: as outras fontes do mesmo fato (escondidas pelo agrupamento) também.
+  for (const id of ids) await markStorySiblingsRead(user.id, id);
 }
 
 export async function setSaved(articleId: string, isSaved: boolean) {
@@ -58,7 +64,6 @@ export async function setSaved(articleId: string, isSaved: boolean) {
     create: { userId: user.id, articleId, isSaved, savedAt: isSaved ? new Date() : null },
     update: { isSaved, savedAt: isSaved ? new Date() : null },
   });
-  revalidatePath("/", "layout");
 }
 
 /** Marca como lidos todos os artigos do escopo publicados até o início da operação. */
@@ -99,6 +104,7 @@ export async function markAllRead(scope: ArticleScope) {
         }
       });
     }
+    // Ação rara: invalida também o cache do roteador (o "Voltar" não mostra o estado antigo).
     revalidatePath("/", "layout");
   }
   const nextFeedId = scope.kind === "feed" ? await findNextUnreadFeedId(user.id, scope.feedId) : null;
@@ -110,56 +116,17 @@ async function findNextUnreadFeedId(userId: string, currentFeedId: string) {
   return nextUnreadFeedId(orderedSidebarFeeds(sidebar), currentFeedId);
 }
 
-/** Busca o conteúdo completo do artigo original (Readability) e guarda. */
-export async function loadFullContent(articleId: string): Promise<{ html?: string; error?: string }> {
+export async function loadMoreArticles(scope: ArticleScope, cursor: ListCursor | null, unreadOnly: boolean, query?: string) {
   const user = await requireUser();
-  await assertAccess(user.id, articleId);
-  const article = await db.article.findUniqueOrThrow({ where: { id: articleId } });
-  // Reaplica o saneamento: conteúdo extraído antes de uma correção no sanitizador
-  // (ex.: forçar target="_blank" nos links) fica com o HTML cru gravado no banco.
-  if (article.fullContentHtml) return { html: sanitizeArticleHtml(article.fullContentHtml, article.url) };
-  const t = await getTranslations("articles.errors");
-  if (!article.url) return { error: t("noOriginalLink") };
-  try {
-    const html = await extractFullContent(article.url);
-    if (!html) return { error: t("extractFailed") };
-    await db.article.update({ where: { id: articleId }, data: { fullContentHtml: html } });
-    return { html };
-  } catch (err) {
-    return { error: err instanceof Error ? localizeError(err, await getLocale()) : t("fetchFailed") };
-  }
-}
-
-/**
- * Busca a imagem de capa (og:image) dos artigos cujo feed não traz imagem.
- * Grava "" quando não encontra, para não buscar de novo.
- */
-export async function loadPreviewImagesAction(articleIds: string[]): Promise<Record<string, string | null>> {
-  const user = await requireUser();
-  const articles = await db.article.findMany({
-    where: { id: { in: articleIds.slice(0, 24) }, imageUrl: null, url: { not: null }, feed: { subscriptions: { some: { userId: user.id } } } },
-    select: { id: true, url: true },
-  });
-
-  const result: Record<string, string | null> = {};
-  const queue = [...articles];
-  await Promise.all(
-    Array.from({ length: Math.min(6, queue.length) }, async () => {
-      for (let a = queue.shift(); a; a = queue.shift()) {
-        try {
-          const image = await findPreviewImage(a.url!);
-          await db.article.update({ where: { id: a.id }, data: { imageUrl: image ?? "" } });
-          result[a.id] = image;
-        } catch {
-          // Falhas transitórias não são persistidas; uma sessão futura pode tentar novamente.
-        }
-      }
-    }),
-  );
-  return result;
-}
-
-export async function loadMoreArticles(scope: ArticleScope, page: number, unreadOnly: boolean, query?: string) {
-  const user = await requireUser();
-  return listArticles(user.id, scope, { page, unreadOnly, query });
+  // Vem do cliente: só aceita o formato esperado.
+  const valid =
+    cursor &&
+    typeof cursor.id === "string" &&
+    cursor.id.length <= 64 &&
+    typeof cursor.publishedAt === "string" &&
+    !Number.isNaN(Date.parse(cursor.publishedAt)) &&
+    (cursor.score === undefined || cursor.score === null || typeof cursor.score === "number")
+      ? { id: cursor.id, publishedAt: cursor.publishedAt, score: cursor.score ?? null }
+      : null;
+  return listArticles(user.id, scope, { cursor: valid, unreadOnly, query });
 }

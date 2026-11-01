@@ -29,17 +29,7 @@ export async function getSidebarData(userId: string) {
     db.userArticle.count({ where: { userId, isSaved: true } }),
   ]);
 
-  const counts = subscriptions.length
-    ? await db.article.groupBy({
-        by: ["feedId"],
-        where: {
-          feedId: { in: subscriptions.map((s) => s.feedId) },
-          NOT: { states: { some: { userId, isRead: true } } },
-        },
-        _count: { _all: true },
-      })
-    : [];
-  const unreadByFeed = new Map(counts.map((c) => [c.feedId, c._count._all]));
+  const unreadByFeed = await unreadCountsByFeed(userId, subscriptions.map((s) => s.feedId));
 
   const subs = subscriptions
     .map((s) => ({
@@ -68,6 +58,29 @@ export async function getSidebarData(userId: string) {
 }
 
 export type SidebarData = Awaited<ReturnType<typeof getSidebarData>>;
+
+/** Não lidos por feed (só os feeds com algum não lido aparecem no mapa). */
+export async function unreadCountsByFeed(userId: string, feedIds: string[]) {
+  if (feedIds.length === 0) return new Map<string, number>();
+  const counts = await db.article.groupBy({
+    by: ["feedId"],
+    where: { feedId: { in: feedIds }, NOT: { states: { some: { userId, isRead: true } } } },
+    _count: { _all: true },
+  });
+  return new Map(counts.map((c) => [c.feedId, c._count._all]));
+}
+
+/** Contadores da barra lateral, sem o resto dos dados: usados para atualizá-la depois de um clique. */
+export async function getSidebarCounts(userId: string) {
+  const [subscriptions, saved] = await Promise.all([
+    db.subscription.findMany({ where: { userId }, select: { feedId: true } }),
+    db.userArticle.count({ where: { userId, isSaved: true } }),
+  ]);
+  const unread = await unreadCountsByFeed(userId, subscriptions.map((s) => s.feedId));
+  return { unread: Object.fromEntries(unread), saved };
+}
+
+export type SidebarCounts = Awaited<ReturnType<typeof getSidebarCounts>>;
 
 function dayKey(date: Date, timeZone: string) {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -137,10 +150,27 @@ const articleSelect = (userId: string) =>
     states: { where: { userId }, select: { isRead: true, isSaved: true, isHighlighted: true, priorityScore: true, priorityReason: true } },
   }) satisfies Prisma.ArticleSelect;
 
+/**
+ * Posição na lista para a próxima página. Cursor e não offset: com "só não lidos", ler artigos
+ * (abrir, marcar, rolar) encolhe o conjunto e um offset pularia páginas inteiras.
+ */
+export type ListCursor = { publishedAt: string; id: string; score?: number | null };
+
+/** Ordem de "Hoje": nota da IA (quando houver), data e id (desempate estável para o cursor). */
+function todayOrder(a: { priorityScore: number | null; publishedAt: Date; id: string }, b: { priorityScore: number | null; publishedAt: Date; id: string }) {
+  return (b.priorityScore ?? -1) - (a.priorityScore ?? -1) || +b.publishedAt - +a.publishedAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
+}
+
+const cursorOf = (item: { id: string; publishedAt: Date; priorityScore?: number | null }): ListCursor => ({
+  publishedAt: item.publishedAt.toISOString(),
+  id: item.id,
+  score: item.priorityScore ?? null,
+});
+
 export async function listArticles(
   userId: string,
   scope: ArticleScope,
-  opts: { unreadOnly?: boolean; page?: number; query?: string } = {},
+  opts: { unreadOnly?: boolean; cursor?: ListCursor | null; query?: string } = {},
 ) {
   const unreadOnly = opts.unreadOnly ?? scope.kind !== "saved";
   const base: Prisma.ArticleWhereInput = {
@@ -149,7 +179,7 @@ export async function listArticles(
   const where: Prisma.ArticleWhereInput = {
     AND: [base, opts.query ? { OR: [{ title: icontains(opts.query) }, { snippet: icontains(opts.query) }] } : {}],
   };
-  const page = Math.max(0, opts.page ?? 0);
+  const cursor = opts.cursor ?? null;
   const { groupStories } = await getUserSettings(userId);
   const group = (items: ArticleListItem[]) => (groupStories ? groupByStory(items) : items);
 
@@ -158,7 +188,7 @@ export async function listArticles(
    * do escopo mais parecidos com a consulta (se o admin ligou a busca semântica).
    */
   const withSemantic = async (items: ArticleListItem[]) => {
-    if (!opts.query || page > 0) return items;
+    if (!opts.query || cursor) return items;
     const matches = await semanticSearch(opts.query, base).catch((err) => {
       console.error("[semantic]", err instanceof Error ? err.message : err);
       return null;
@@ -173,22 +203,33 @@ export async function listArticles(
   };
 
   if (scope.kind === "today") {
-    // Ordena por prioridade da IA (quando houver) e depois por data.
+    // Ordena por prioridade da IA (quando houver) e depois por data, em memória (só o dia).
     const rows = await db.article.findMany({ where, select: articleSelect(userId), orderBy: { publishedAt: "desc" } });
-    const sorted = group(
-      rows.map(toListItem).sort((a, b) => (b.priorityScore ?? -1) - (a.priorityScore ?? -1) || +b.publishedAt - +a.publishedAt),
-    );
-    return { items: await withSemantic(sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)), hasMore: sorted.length > (page + 1) * PAGE_SIZE };
+    const sorted = group(rows.map(toListItem).sort(todayOrder));
+    const at = cursor ? { id: cursor.id, publishedAt: new Date(cursor.publishedAt), priorityScore: cursor.score ?? null } : null;
+    const rest = at ? sorted.filter((item) => todayOrder(at, item) < 0) : sorted;
+    const items = rest.slice(0, PAGE_SIZE);
+    const hasMore = rest.length > PAGE_SIZE;
+    return { items: await withSemantic(items), hasMore, nextCursor: hasMore ? cursorOf(items.at(-1)!) : null };
   }
 
+  const after: Prisma.ArticleWhereInput = cursor
+    ? { OR: [{ publishedAt: { lt: new Date(cursor.publishedAt) } }, { publishedAt: new Date(cursor.publishedAt), id: { lt: cursor.id } }] }
+    : {};
   const rows = await db.article.findMany({
-    where,
+    where: { AND: [where, after] },
     select: articleSelect(userId),
-    orderBy: { publishedAt: "desc" },
-    skip: page * PAGE_SIZE,
+    orderBy: [{ publishedAt: "desc" }, { id: "desc" }],
     take: PAGE_SIZE + 1,
   });
-  return { items: await withSemantic(group(rows.slice(0, PAGE_SIZE).map(toListItem))), hasMore: rows.length > PAGE_SIZE };
+  const page = rows.slice(0, PAGE_SIZE);
+  const hasMore = rows.length > PAGE_SIZE;
+  return {
+    items: await withSemantic(group(page.map(toListItem))),
+    hasMore,
+    // Do último registro buscado (não do último exibido: o agrupamento pode juntar os do fim).
+    nextCursor: hasMore ? cursorOf({ id: page.at(-1)!.id, publishedAt: page.at(-1)!.publishedAt }) : null,
+  };
 }
 
 /**
@@ -272,26 +313,33 @@ export async function getArticle(userId: string, articleId: string) {
 
 export type ArticleDetail = NonNullable<Awaited<ReturnType<typeof getArticle>>>;
 
-/** Título do escopo; os fixos vêm traduzidos em `labels` (articles.scopes.*). */
-export async function scopeTitle(
+/**
+ * Título do escopo (null = escopo inexistente para o usuário) e, num feed, o último erro de
+ * atualização, na mesma consulta. Os títulos fixos vêm traduzidos em `labels` (articles.scopes.*).
+ */
+export async function scopeHeader(
   userId: string,
   scope: ArticleScope,
   labels: { today: string; all: string; saved: string },
-): Promise<string | null> {
+): Promise<{ title: string; lastError: string | null } | null> {
   switch (scope.kind) {
     case "today":
-      return labels.today;
+      return { title: labels.today, lastError: null };
     case "all":
-      return labels.all;
+      return { title: labels.all, lastError: null };
     case "saved":
-      return scope.tag ? `${labels.saved} · ${scope.tag}` : labels.saved;
+      return { title: scope.tag ? `${labels.saved} · ${scope.tag}` : labels.saved, lastError: null };
     case "feed": {
-      const sub = await db.subscription.findFirst({ where: { userId, feedId: scope.feedId }, include: { feed: true } });
-      return sub ? (sub.customTitle ?? sub.feed.title) : null;
+      const sub = await db.subscription.findFirst({
+        where: { userId, feedId: scope.feedId },
+        select: { customTitle: true, feed: { select: { title: true, lastError: true, errorCount: true } } },
+      });
+      if (!sub) return null;
+      return { title: sub.customTitle ?? sub.feed.title, lastError: sub.feed.errorCount > 0 ? sub.feed.lastError : null };
     }
     case "folder": {
-      const folder = await db.folder.findFirst({ where: { id: scope.folderId, userId } });
-      return folder?.name ?? null;
+      const folder = await db.folder.findFirst({ where: { id: scope.folderId, userId }, select: { name: true } });
+      return folder ? { title: folder.name, lastError: null } : null;
     }
   }
 }

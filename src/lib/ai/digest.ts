@@ -61,6 +61,7 @@ async function generateDigestUnlocked(userId: string, now: Date) {
   const { model, modelId } = await resolveModel(userId);
   const { text } = await generateText({
     model,
+    abortSignal: AbortSignal.timeout(180_000),
     instructions: `Você escreve o digest diário de um leitor de RSS, em Markdown.
 - Agrupe os artigos por tema com títulos "## Tema".
 - Em cada tema, escreva 1 a 3 frases sintetizando o que aconteceu e liste os artigos mais relevantes como links no formato [título](/article/ID).

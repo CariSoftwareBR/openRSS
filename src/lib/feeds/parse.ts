@@ -57,12 +57,28 @@ export type ParsedArticle = {
   hasPublishDate: boolean;
 };
 
+/** Item que já está no banco: só guid e data (para corrigir uma data de fallback). */
+export type KnownItem = { guid: string; publishedAt: Date; hasPublishDate: boolean };
+
 export type ParsedFeed = {
   title: string;
   siteUrl: string | null;
   description: string | null;
   iconUrl: string | null;
+  /** Itens novos, completos (HTML saneado, imagem, resumo). */
   items: ParsedArticle[];
+  /** Itens já gravados (quando `existing` foi informado): não passam pelo saneamento. */
+  known: KnownItem[];
+};
+
+type ParseOptions = {
+  /**
+   * Retorna, dos guids informados, os que já existem no banco e a data gravada. Itens conhecidos
+   * pulam o saneamento do HTML, que é a parte cara do parse e se repetia a cada atualização.
+   */
+  existing?: (guids: string[]) => Promise<Map<string, Date>>;
+  /** Itens publicados antes disto (fora da retenção) são descartados sem passar pelo saneamento. */
+  skipBefore?: Date;
 };
 
 export function looksLikeFeed(body: string): boolean {
@@ -92,38 +108,54 @@ export function looksLikeFeed(body: string): boolean {
   return m !== null;
 }
 
-export async function parseFeed(xml: string, feedUrl: string): Promise<ParsedFeed> {
+export async function parseFeed(xml: string, feedUrl: string, opts: ParseOptions = {}): Promise<ParsedFeed> {
   const feed = await parser.parseString(xml);
   const siteUrl = feed.link ? safeUrl(feed.link, feedUrl) : null;
 
-  const items = feed.items.slice(0, 200).map((item): ParsedArticle => {
+  // Fase 1 (barata): link, data e guid de cada item.
+  const all = feed.items.slice(0, 200).map((item) => {
     const rawLink = item.link ? safeUrl(item.link, siteUrl ?? feedUrl) : null;
     const link = rawLink ? (canonicalizeUrl(rawLink) ?? rawLink) : null;
     const rawHtml = item["content:encoded"] ?? item.content ?? item.summary ?? "";
+    const { publishedAt, hasPublishDate } = resolvePublishedAt(item, link);
+    const dateKey = hasPublishDate ? publishedAt.toISOString() : "";
+    // Sem guid/id/link: o conteúdo entra no hash para itens sem título nem data não colidirem entre si.
+    const guid = itemGuid(item.guid ?? item.id, link, `${item.title ?? ""}|${dateKey}|${rawHtml || item.contentSnippet || ""}`);
+    return { item, link, rawHtml, publishedAt, hasPublishDate, guid };
+  });
+  const heads = opts.skipBefore ? all.filter((h) => h.publishedAt >= opts.skipBefore!) : all;
+
+  const stored = opts.existing && heads.length ? await opts.existing([...new Set(heads.map((h) => h.guid))]) : null;
+  const known: KnownItem[] = [];
+  const items: ParsedArticle[] = [];
+
+  // Fase 2 (cara): saneamento e extração só dos itens novos.
+  for (const { item, link, rawHtml, publishedAt, hasPublishDate, guid } of heads) {
+    if (stored?.has(guid)) {
+      known.push({ guid, publishedAt, hasPublishDate });
+      continue;
+    }
     const contentHtml = rawHtml ? sanitizeArticleHtml(rawHtml, link ?? siteUrl ?? feedUrl) : null;
     const text = stripHtml(rawHtml || item.contentSnippet || "");
-    const { publishedAt, hasPublishDate } = resolvePublishedAt(item, link);
     const group = first(item["media:group"]);
     const imageUrl =
       mediaImage(item["media:content"], item["media:thumbnail"]) ??
       mediaImage(group?.["media:content"], group?.["media:thumbnail"]) ??
       (item.enclosure?.type?.startsWith("image/") ? item.enclosure.url : null) ??
       firstImage(contentHtml);
-    const dateKey = hasPublishDate ? publishedAt.toISOString() : "";
 
-    return {
-      // Sem guid/id/link: o conteúdo entra no hash para itens sem título nem data não colidirem entre si.
-      guid: itemGuid(item.guid ?? item.id, link, `${item.title ?? ""}|${dateKey}|${rawHtml || item.contentSnippet || ""}`),
+    items.push({
+      guid,
       url: link,
       title: (item.title && stripHtml(item.title)) || truncate(text, 80) || "(sem título)",
-      author: item.creator ?? (item as { author?: string }).author ?? null,
+      author: (item.creator ?? (item as { author?: string }).author)?.trim() || null,
       contentHtml,
       snippet: text ? truncate(text, 280) : null,
       imageUrl: imageUrl ?? null,
       publishedAt,
       hasPublishDate,
-    };
-  });
+    });
+  }
 
   return {
     title: feed.title?.trim() || new URL(feedUrl).hostname,
@@ -131,6 +163,7 @@ export async function parseFeed(xml: string, feedUrl: string): Promise<ParsedFee
     description: feed.description ?? null,
     iconUrl: (feed.image as { url?: string } | undefined)?.url ?? (siteUrl ? faviconFor(siteUrl) : null),
     items,
+    known,
   };
 }
 

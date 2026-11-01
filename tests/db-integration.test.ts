@@ -441,6 +441,7 @@ describe("subscribe backlog", () => {
         siteUrl: "https://news.example",
         description: null,
         iconUrl: null,
+        known: [],
         items: [
           parsedItem("old", new Date(Date.now() - 14 * 86400000)),
           parsedItem("fresh", new Date(Date.now() - 3600_000)),
@@ -490,6 +491,17 @@ describe("ingest dates", () => {
     await ingestItems(feed.id, [{ ...item, publishedAt: real, hasPublishDate: true }]);
     const row = await db.article.findFirstOrThrow({ where: { feedId: feed.id, guid: "same" } });
     expect(+row.publishedAt).toBe(+real);
+  });
+
+  it("skips items older than the retention window so they do not come back as new", async () => {
+    const feed = await createFeed("https://retention-ingest.example/feed", []);
+    const base = { url: null, title: "A", author: null, contentHtml: null, snippet: null, imageUrl: null, hasPublishDate: true };
+    const created = await ingestItems(feed.id, [
+      { ...base, guid: "ancient", publishedAt: OLD },
+      { ...base, guid: "recent", publishedAt: new Date() },
+    ]);
+    expect(created).toHaveLength(1);
+    expect((await db.article.findMany({ where: { feedId: feed.id } })).map((a) => a.guid)).toEqual(["recent"]);
   });
 
   it("marks 14-day-old unread articles as read", async () => {
@@ -648,5 +660,47 @@ describe("semantic search", () => {
     } finally {
       await fake.close();
     }
+  });
+});
+
+describe("maintenance", () => {
+  it("backs up SQLite only when enabled and keeps the latest three", async () => {
+    const { backupSqlite, maintainSqlite } = await import("@/lib/jobs/maintenance");
+    const { existsSync, readdirSync } = await import("node:fs");
+    process.env.OPENRSS_DATA_DIR = dataDir;
+    delete process.env.OPENRSS_SQLITE_BACKUP;
+    expect(await backupSqlite()).toBeNull();
+
+    process.env.OPENRSS_SQLITE_BACKUP = "true";
+    for (const day of ["2026-10-01", "2026-10-08", "2026-10-15", "2026-10-22"]) {
+      const file = await backupSqlite(new Date(`${day}T04:15:00Z`));
+      expect(file && existsSync(file)).toBe(true);
+    }
+    expect(readdirSync(join(dataDir, "backups")).sort()).toEqual(["openrss-2026-10-08.db", "openrss-2026-10-15.db", "openrss-2026-10-22.db"]);
+    await expect(maintainSqlite()).resolves.toBeUndefined();
+    delete process.env.OPENRSS_SQLITE_BACKUP;
+    delete process.env.OPENRSS_DATA_DIR;
+  });
+});
+
+describe("cursor pagination", () => {
+  it("does not skip unread articles when the first page was read meanwhile", async () => {
+    const now = Date.now();
+    const feed = await createFeed(
+      "https://cursor.example/feed",
+      Array.from({ length: 45 }, (_, i) => ({ guid: `c${i}`, publishedAt: new Date(now - i * 60_000) })),
+    );
+    await db.subscription.create({ data: { userId: "bob", feedId: feed.id } });
+    const { setArticleStates } = await import("@/lib/article-state");
+    const scope = { kind: "feed" as const, feedId: feed.id };
+
+    const first = await listArticles("bob", scope, { unreadOnly: true });
+    expect(first.items).toHaveLength(40);
+    expect(first.hasMore).toBe(true);
+    await setArticleStates("bob", first.items.map((i) => i.id), { isRead: true });
+
+    const second = await listArticles("bob", scope, { unreadOnly: true, cursor: first.nextCursor });
+    expect(second.items.map((i) => i.title)).toEqual(["c40", "c41", "c42", "c43", "c44"]);
+    expect(second.hasMore).toBe(false);
   });
 });
