@@ -24,7 +24,6 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { useLocale, useTranslations } from "next-intl";
 import type { ArticleDetail } from "@/lib/queries";
-import { loadFullContent } from "@/app/actions/articles";
 import { createThreadAction } from "@/app/actions/chat";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -33,6 +32,12 @@ import { SummaryPanel, type SummaryMeta } from "./summary-panel";
 import { ArticleQA } from "./article-qa";
 import { TagEditor } from "./tag-editor";
 import { READER_WIDTH_ORDER, READER_WIDTHS, useReaderWidth } from "@/hooks/use-reader-width";
+
+/** Matéria completa (Readability). Rota GET, não server action: não segura a fila de actions. */
+async function loadFullContent(articleId: string): Promise<{ html?: string; error?: string }> {
+  const res = await fetch(`/api/articles/${encodeURIComponent(articleId)}/full-content`);
+  return (await res.json().catch(() => ({}))) as { html?: string; error?: string };
+}
 
 function visibleTextLength(html: string | null): number {
   if (!html) return 0;

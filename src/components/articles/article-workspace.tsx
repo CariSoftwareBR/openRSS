@@ -78,8 +78,15 @@ export function ArticleWorkspace({
   const requestedImages = useRef(new Set<string>());
   const previewQueue = useRef<string[][]>([]);
   const activePreviewRequests = useRef(0);
-  const previewAbort = useRef<AbortController | null>(null);
-  useEffect(() => () => previewAbort.current?.abort(), []);
+  // Ao sair da página, a fila para; os lotes em andamento terminam (e gravam a capa no servidor).
+  // Sem AbortController: no StrictMode o desmonte simulado cancelaria os lotes recém-iniciados.
+  const mounted = useRef(false);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   useEffect(() => {
     const missing = items.filter((i) => !i.imageChecked && i.url && !requestedImages.current.has(i.id)).map((i) => i.id);
     if (missing.length === 0) return;
@@ -87,19 +94,16 @@ export function ArticleWorkspace({
     for (let i = 0; i < missing.length; i += 6) {
       previewQueue.current.push(missing.slice(i, i + 6));
     }
-    previewAbort.current ??= new AbortController();
-    const signal = previewAbort.current.signal;
-
     function processPreviewQueue() {
-      while (activePreviewRequests.current < 3 && !signal.aborted) {
+      while (activePreviewRequests.current < 3 && mounted.current) {
         const batch = previewQueue.current.shift();
         if (!batch) return;
         activePreviewRequests.current++;
-        void fetch(`/api/articles/preview-images?ids=${batch.map(encodeURIComponent).join(",")}`, { signal })
+        void fetch(`/api/articles/preview-images?ids=${batch.map(encodeURIComponent).join(",")}`)
           .then((res): Promise<Record<string, string | null>> | Record<string, string | null> => (res.ok ? res.json() : {}))
           .catch((): Record<string, string | null> => ({}))
           .then((found) => {
-            if (signal.aborted) return;
+            if (!mounted.current) return;
             // O lote todo sai do estado "carregando"; falhas transitórias são tentadas de novo em outra visita.
             const checked = new Set(batch);
             setItems((list) =>

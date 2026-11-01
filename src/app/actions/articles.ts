@@ -1,11 +1,8 @@
 "use server";
 
-import { getLocale, getTranslations } from "next-intl/server";
+import { getTranslations } from "next-intl/server";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
-import { extractFullContent } from "@/lib/feeds/extract";
-import { sanitizeArticleHtml } from "@/lib/feeds/sanitize";
-import { localizeError } from "@/lib/localized-error";
 import { markStorySiblingsRead } from "@/lib/article-state";
 import { nextUnreadFeedId, orderedSidebarFeeds } from "@/lib/feeds/next-unread";
 import { articleScopeWhere, getArticle, getSidebarData, listArticles, type ArticleScope } from "@/lib/queries";
@@ -105,26 +102,6 @@ export async function markAllRead(scope: ArticleScope) {
 async function findNextUnreadFeedId(userId: string, currentFeedId: string) {
   const sidebar = await getSidebarData(userId);
   return nextUnreadFeedId(orderedSidebarFeeds(sidebar), currentFeedId);
-}
-
-/** Busca o conteúdo completo do artigo original (Readability) e guarda. */
-export async function loadFullContent(articleId: string): Promise<{ html?: string; error?: string }> {
-  const user = await requireUser();
-  await assertAccess(user.id, articleId);
-  const article = await db.article.findUniqueOrThrow({ where: { id: articleId } });
-  // Reaplica o saneamento: conteúdo extraído antes de uma correção no sanitizador
-  // (ex.: forçar target="_blank" nos links) fica com o HTML cru gravado no banco.
-  if (article.fullContentHtml) return { html: sanitizeArticleHtml(article.fullContentHtml, article.url) };
-  const t = await getTranslations("articles.errors");
-  if (!article.url) return { error: t("noOriginalLink") };
-  try {
-    const html = await extractFullContent(article.url);
-    if (!html) return { error: t("extractFailed") };
-    await db.article.update({ where: { id: articleId }, data: { fullContentHtml: html } });
-    return { html };
-  } catch (err) {
-    return { error: err instanceof Error ? localizeError(err, await getLocale()) : t("fetchFailed") };
-  }
 }
 
 export async function loadMoreArticles(scope: ArticleScope, page: number, unreadOnly: boolean, query?: string) {
