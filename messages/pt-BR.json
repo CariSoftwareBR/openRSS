@@ -1023,7 +1023,7 @@
     }
   },
   "updates": {
-    "available": "Nova versão {version} disponível",
+    "available": "Versão {version} disponível",
     "dismiss": "Dispensar até a próxima versão",
     "title": "openRSS {version} disponível",
     "subtitle": "Você está na versão {current}.",
