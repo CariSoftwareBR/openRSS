@@ -66,6 +66,7 @@ typography:
 rounded:
   none: 0px
   button: 4px
+  control: 6px
   sm: 8px
   pill: 9999px
 spacing:
@@ -93,7 +94,7 @@ components:
     backgroundColor: "{colors.canvas-soft}"
     textColor: "{colors.ink}"
     borderColor: "{colors.hairline}"
-    rounded: "{rounded.sm}"
+    rounded: "{rounded.control}"
     padding: "{spacing.sm} {spacing.md}"
   card:
     backgroundColor: "{colors.canvas-card}"
@@ -169,8 +170,9 @@ Nenhuma sombra.
 
 ## Shapes
 - `4px` para botões.
-- `8px` para cartões, inputs e linhas selecionadas.
-- `9999px` para chips.
+- `6px` para inputs, comboboxes e controles segmentados.
+- `8px` para cartões e linhas selecionadas.
+- `9999px` para chips e interruptores.
 
 ## Components
 

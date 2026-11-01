@@ -50,6 +50,7 @@ typography:
     fontFamily: "Geist Mono, monospace"
 rounded:
   button: "4px"
+  control: "0.375rem"
   sm: "0.45rem"
   md: "0.6rem"
   lg: "0.75rem"
@@ -80,7 +81,7 @@ components:
   input:
     backgroundColor: "{colors.background}"
     textColor: "{colors.foreground}"
-    rounded: "{rounded.xl}"
+    rounded: "{rounded.control}"
     padding: "0 0.75rem"
     height: "2.25rem"
   card:

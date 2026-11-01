@@ -32,8 +32,9 @@
   --radius-lg: 0.75rem;
   --radius-xl: 1.05rem;
   --radius-2xl: 1.35rem;
-  --radius-control: 0.75rem;
-  --radius-input: 1.05rem;
+  /* Campos e controles mais retos (6px), próximos dos botões (4px); cards seguem macios. */
+  --radius-control: 0.375rem;
+  --radius-input: 0.375rem;
   --radius-card: 1.35rem;
 
   --shadow-card: 0 20px 25px -5px rgb(0 0 0 / 0.08), 0 8px 10px -6px rgb(0 0 0 / 0.06);
@@ -67,8 +68,8 @@
   --sidebar: #0a0a0a;
   --sidebar-active: #1a1c20;
 
-  --radius-control: 9999px;
-  --radius-input: 8px;
+  --radius-control: 6px;
+  --radius-input: 6px;
   --radius-card: 8px;
 
   --shadow-card: none;
