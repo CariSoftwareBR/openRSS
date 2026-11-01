@@ -101,6 +101,8 @@ export async function applyRulesToArticles(articleIds: string[], phase: RulePhas
   const subOf = new Map(subscriptions.map((s) => [`${s.userId}:${s.feedId}`, s]));
   const scoreOf = new Map(states.map((s) => [`${s.userId}:${s.articleId}`, s.priorityScore]));
 
+  // Webhooks em paralelo no fim (cada um tem timeout próprio): em série seguravam o refresh.
+  const notifications: Promise<void>[] = [];
   for (const userId of userIds) {
     const userRules = compiled.filter((r) => r.rule.userId === userId);
     const byArticle = new Map<string, Set<RuleAction>>();
@@ -121,7 +123,7 @@ export async function applyRulesToArticles(articleIds: string[], phase: RulePhas
           Date.now() - article.publishedAt.getTime() < INGEST_UNREAD_MAX_AGE_MS;
         if (entry.actions.includes("notify") && fresh && notified < NOTIFY_MAX_PER_RUN) {
           notified++;
-          await notify(entry.rule, { id: article.id, title: article.title, url: article.url, feed: article.feed.title, score: candidate.score });
+          notifications.push(notify(entry.rule, { id: article.id, title: article.title, url: article.url, feed: article.feed.title, score: candidate.score }));
         }
       }
       if (hits > 0) {
@@ -130,6 +132,7 @@ export async function applyRulesToArticles(articleIds: string[], phase: RulePhas
     }
     if (byArticle.size > 0) await writeActions(userId, byArticle);
   }
+  await Promise.all(notifications);
 }
 
 async function notify(rule: Rule, article: { id: string; title: string; url: string | null; feed: string; score: number | null }) {

@@ -81,7 +81,12 @@ export async function embedArticles(articleIds: string[], config?: EmbeddingConf
   let done = 0;
   for (let i = 0; i < articles.length; i += BATCH) {
     const batch = articles.slice(i, i + BATCH);
-    const { embeddings } = await embedMany({ model: active.model, values: batch.map(embeddingText), maxRetries: 1 });
+    const { embeddings } = await embedMany({
+      model: active.model,
+      values: batch.map(embeddingText),
+      maxRetries: 1,
+      abortSignal: AbortSignal.timeout(60_000),
+    });
     await db.$transaction(
       batch.map((a, j) => {
         const vector = vectorToBytes(toVector(embeddings[j]));
@@ -120,7 +125,13 @@ export async function embedPending(limit = INDEX_PER_RUN) {
 export async function semanticSearch(query: string, where: Prisma.ArticleWhereInput, limit = 40): Promise<{ id: string; score: number }[] | null> {
   const config = await getEmbeddingConfig();
   if (!config || !query.trim()) return null;
-  const { embedding } = await embed({ model: config.model, value: query.trim().slice(0, 1000), maxRetries: 1 });
+  const { embedding } = await embed({
+    model: config.model,
+    value: query.trim().slice(0, 1000),
+    maxRetries: 1,
+    // A busca semântica entra na renderização da listagem: um provedor fora do ar não pode travá-la.
+    abortSignal: AbortSignal.timeout(8_000),
+  });
   const target = toVector(embedding);
   const rows = await db.articleEmbedding.findMany({
     where: { modelKey: config.key, article: where },

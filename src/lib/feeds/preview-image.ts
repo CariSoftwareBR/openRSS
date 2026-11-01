@@ -108,7 +108,7 @@ const BACKGROUND_WINDOW_MS = 3 * 86400_000;
  * Busca em segundo plano a capa dos artigos recentes que ainda não foram verificados, para a
  * listagem já abrir com as imagens. Limitado por chamada para não martelar os sites.
  */
-export async function fillPendingPreviewImages(limit = 24) {
+export async function fillPendingPreviewImages(limit = 20) {
   const pending = await db.article.findMany({
     where: {
       imageUrl: null,

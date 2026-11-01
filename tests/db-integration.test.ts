@@ -441,6 +441,7 @@ describe("subscribe backlog", () => {
         siteUrl: "https://news.example",
         description: null,
         iconUrl: null,
+        known: [],
         items: [
           parsedItem("old", new Date(Date.now() - 14 * 86400000)),
           parsedItem("fresh", new Date(Date.now() - 3600_000)),

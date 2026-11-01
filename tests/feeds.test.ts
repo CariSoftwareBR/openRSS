@@ -51,6 +51,19 @@ describe("parseFeed", () => {
     expect(second.snippet).toBe("Texto simples");
   });
 
+  it("separa itens já gravados sem saneá-los", async () => {
+    const asked: string[][] = [];
+    const feed = await parseFeed(rss, "https://exemplo.com/feed.xml", {
+      existing: async (guids) => {
+        asked.push(guids);
+        return new Map([["post-1", new Date("2026-09-15T00:00:00Z")]]);
+      },
+    });
+    expect(asked).toEqual([["post-1", "https://exemplo.com/posts/2"]]);
+    expect(feed.items.map((i) => i.guid)).toEqual(["https://exemplo.com/posts/2"]);
+    expect(feed.known).toEqual([{ guid: "post-1", publishedAt: new Date("2026-09-14T10:00:00.000Z"), hasPublishDate: true }]);
+  });
+
   it("lê Atom", async () => {
     const feed = await parseFeed(atom, "https://atom.test/feed");
     expect(feed.items[0]).toMatchObject({ guid: "tag:1", title: "A1", url: "https://atom.test/1" });
@@ -147,5 +160,33 @@ describe("OPML", () => {
       { url: "https://a.test/feed", title: "A & B", folder: "Tech" },
       { url: "https://c.test/rss", title: "C", folder: null },
     ]);
+  });
+});
+
+describe("refresh scheduling", async () => {
+  const { failureDelayMinutes, nextFetchDelayMinutes } = await import("@/lib/feeds/refresh");
+  const { FetchError, parseRetryAfter } = await import("@/lib/feeds/net");
+
+  it("respects Cache-Control max-age up to 2h, never below the interval", () => {
+    expect(nextFetchDelayMinutes(30, null)).toBe(30);
+    expect(nextFetchDelayMinutes(30, "public, max-age=600")).toBe(30);
+    expect(nextFetchDelayMinutes(30, "max-age=3600")).toBe(60);
+    expect(nextFetchDelayMinutes(30, "max-age=86400")).toBe(120);
+  });
+
+  it("backs off, honors Retry-After and pauses dead feeds", () => {
+    expect(failureDelayMinutes(30, 1, new Error("x"))).toBe(60);
+    expect(failureDelayMinutes(30, 10, new Error("x"))).toBe(24 * 60);
+    expect(failureDelayMinutes(30, 1, new FetchError("httpStatus", { status: 429 }, 429, 3 * 3600))).toBe(180);
+    expect(failureDelayMinutes(30, 1, new FetchError("httpStatus", { status: 410 }, 410))).toBe(7 * 24 * 60);
+    expect(failureDelayMinutes(30, 14, new Error("x"))).toBe(7 * 24 * 60);
+  });
+
+  it("parses Retry-After in seconds or HTTP date", () => {
+    const now = Date.parse("2026-11-01T12:00:00Z");
+    expect(parseRetryAfter("120", now)).toBe(120);
+    expect(parseRetryAfter("Sun, 01 Nov 2026 12:10:00 GMT", now)).toBe(600);
+    expect(parseRetryAfter("garbage", now)).toBeUndefined();
+    expect(parseRetryAfter(null, now)).toBeUndefined();
   });
 });

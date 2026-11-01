@@ -184,8 +184,11 @@ model UserArticle {
   isHighlighted  Boolean   @default(false) // marcado por uma regra com a ação "destacar"
 
   @@id([userId, articleId])
-  @@index([userId, isRead])
-  @@index([userId, isSaved])
+  // Com a data no fim: servem aos filtros por lido/salvo e às listas ordenadas (offline, APIs).
+  @@index([userId, isRead, readAt])
+  @@index([userId, isSaved, savedAt])
+  // Retenção ("salvo por alguém?") e o ON DELETE CASCADE de article não têm userId.
+  @@index([articleId, isSaved])
   @@map("user_article")
 }
 
