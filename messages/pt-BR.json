@@ -311,6 +311,7 @@
       "readStateFailed": "Não foi possível atualizar o estado de leitura.",
       "savedStateFailed": "Não foi possível atualizar os artigos salvos.",
       "markAllFailed": "Não foi possível marcar os artigos como lidos.",
+      "loadMoreFailed": "Não foi possível carregar mais artigos.",
       "refreshFailed": "Não foi possível atualizar o feed.",
       "http": "Falha (HTTP {status})",
       "emptyModelResponse": "O modelo não retornou conteúdo.",

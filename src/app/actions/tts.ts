@@ -5,7 +5,7 @@ import { getLocale } from "next-intl/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { encrypt } from "@/lib/crypto";
-import { requireUser } from "@/lib/session";
+import { isAdminNow, requireUser } from "@/lib/session";
 import { requestSpeech, TTS_FORMATS } from "@/lib/ai/tts";
 import { LocalizedError, localizeError } from "@/lib/localized-error";
 
@@ -28,7 +28,7 @@ async function editable(id: string) {
   const user = await requireUser();
   const provider = await db.ttsProvider.findUnique({ where: { id } });
   if (!provider) throw new LocalizedError("ttsProviderNotFound");
-  if (provider.userId !== user.id && !(provider.userId === null && user.role === "admin")) throw new LocalizedError("noPermission");
+  if (provider.userId !== user.id && !(provider.userId === null && (await isAdminNow(user.id)))) throw new LocalizedError("noPermission");
   return { user, provider };
 }
 
@@ -37,7 +37,7 @@ export async function saveTtsProviderAction(input: z.input<typeof schema>) {
   const parsed = schema.safeParse(input);
   if (!parsed.success) return failed(new LocalizedError("ttsInvalidFields"));
   const { id, sourceAiProviderId, scope, apiKey, ...rest } = parsed.data;
-  if (scope === "global" && user.role !== "admin") return failed(new LocalizedError("ttsAdminsOnly"));
+  if (scope === "global" && !(await isAdminNow(user.id))) return failed(new LocalizedError("ttsAdminsOnly"));
   try {
     const source = sourceAiProviderId
       ? await db.aiProvider.findFirst({

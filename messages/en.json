@@ -311,6 +311,7 @@
       "readStateFailed": "Could not update the read state.",
       "savedStateFailed": "Could not update saved articles.",
       "markAllFailed": "Could not mark the articles as read.",
+      "loadMoreFailed": "Could not load more articles.",
       "refreshFailed": "Could not refresh the feed.",
       "http": "Failed (HTTP {status})",
       "emptyModelResponse": "The model returned no content.",

@@ -46,7 +46,9 @@ export async function updateSettingsAction(input: z.input<typeof schema>) {
   await db.userSettings.upsert({ where: { userId: user.id }, create: { userId: user.id, ...data }, update: data });
   // Mantém o cookie alinhado para as páginas públicas (login) após sair.
   if (data.uiLanguage) await writeLocaleCookie(data.uiLanguage);
-  revalidatePath("/", "layout");
+  // Só a visualização (botões da lista): o cliente já aplicou; remontar a página toda é desperdício.
+  const onlyListView = Object.keys(data).every((key) => key === "listView");
+  if (!onlyListView) revalidatePath("/", "layout");
   return { ok: true as const };
 }
 

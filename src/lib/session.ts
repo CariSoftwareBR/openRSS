@@ -14,14 +14,18 @@ export async function requireUser() {
 }
 
 /**
- * O papel vem do banco, não da sessão: com o cache de sessão em cookie, um admin rebaixado
- * continuaria "admin" até o cookie vencer.
+ * Papel atual, lido do banco (e não da sessão): com o cache de sessão em cookie, um admin
+ * rebaixado continuaria "admin" até o cookie vencer. Use em toda checagem que dá poder de admin.
  */
+export const isAdminNow = cache(async (userId: string) => {
+  const current = await db.user.findUnique({ where: { id: userId }, select: { role: true } });
+  return current?.role === "admin";
+});
+
 export async function requireAdmin() {
   const user = await requireUser();
-  const current = await db.user.findUnique({ where: { id: user.id }, select: { role: true } });
-  if (current?.role !== "admin") redirect("/");
-  return { ...user, role: current.role };
+  if (!(await isAdminNow(user.id))) redirect("/");
+  return { ...user, role: "admin" };
 }
 
 /** Para route handlers: retorna null em vez de redirecionar. */

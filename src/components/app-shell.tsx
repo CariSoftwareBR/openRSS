@@ -50,6 +50,8 @@ import { createFolderAction, refreshAllFeedsAction, renameFolderAction, updateSu
 import { AddFeedDialog } from "@/components/add-feed-dialog";
 import { applySidebarCounts, SidebarCountsProvider, useSidebarCounts } from "@/components/sidebar-counts";
 import { UpdateNotice } from "@/components/update-notice";
+import { ListViewProvider } from "@/components/list-view-context";
+import type { ListView } from "@/lib/list-view";
 import type { UpdateInfo } from "@/lib/updates";
 import { FeedIcon } from "@/components/feed-icon";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -77,11 +79,14 @@ export function AppShell({
   sidebar,
   user,
   update,
+  listView,
   children,
 }: {
   sidebar: SidebarData;
   user: User;
   update: UpdateInfo | null;
+  /** Visualização salva da lista (o esqueleto de carregamento usa o mesmo formato). */
+  listView: ListView;
   children: React.ReactNode;
 }) {
   const t = useTranslations("shell");
@@ -124,7 +129,9 @@ export function AppShell({
               <Rss className="size-4 text-primary" /> openRSS
             </span>
           </div>
-          <main className="min-h-0 flex-1">{children}</main>
+          <main className="min-h-0 flex-1">
+            <ListViewProvider initial={listView}>{children}</ListViewProvider>
+          </main>
         </div>
       </div>
     </SidebarCountsProvider>

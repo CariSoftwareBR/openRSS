@@ -34,12 +34,19 @@ export async function setArticleStates(userId: string, articleIds: string[], cha
 
 /** Ao ler um artigo agrupado, as outras fontes do mesmo fato (nos feeds do usuário) também contam como lidas. */
 export async function markStorySiblingsRead(userId: string, articleId: string) {
-  const article = await db.article.findUnique({ where: { id: articleId }, select: { storyId: true } });
-  if (!article?.storyId) return 0;
+  return markStorySiblingsReadMany(userId, [articleId]);
+}
+
+/** Versão em lote (rolagem): três consultas no total, não três por artigo. */
+export async function markStorySiblingsReadMany(userId: string, articleIds: string[]) {
+  if (articleIds.length === 0) return 0;
+  const read = await db.article.findMany({ where: { id: { in: articleIds }, storyId: { not: null } }, select: { storyId: true } });
+  const storyIds = [...new Set(read.map((a) => a.storyId!))];
+  if (storyIds.length === 0) return 0;
   const siblings = await db.article.findMany({
     where: {
-      storyId: article.storyId,
-      id: { not: articleId },
+      storyId: { in: storyIds },
+      id: { notIn: articleIds },
       feed: { subscriptions: { some: { userId } } },
       NOT: { states: { some: { userId, isRead: true } } },
     },

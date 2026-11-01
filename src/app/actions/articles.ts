@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getTranslations } from "next-intl/server";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
-import { markStorySiblingsRead, setArticleStates } from "@/lib/article-state";
+import { accessibleArticles, markStorySiblingsRead, markStorySiblingsReadMany, setArticleStates } from "@/lib/article-state";
 import { nextUnreadFeedId, orderedSidebarFeeds } from "@/lib/feeds/next-unread";
 import { articleScopeWhere, getArticle, getSidebarData, listArticles, type ArticleScope, type ListCursor } from "@/lib/queries";
 
@@ -52,8 +52,10 @@ export async function markReadMany(articleIds: string[]) {
   const user = await requireUser();
   const ids = articleIds.filter((id) => typeof id === "string").slice(0, 200);
   await setArticleStates(user.id, ids, { isRead: true });
-  // Como em setRead: as outras fontes do mesmo fato (escondidas pelo agrupamento) também.
-  for (const id of ids) await markStorySiblingsRead(user.id, id);
+  // Como em setRead: as outras fontes do mesmo fato (escondidas pelo agrupamento) também. Só dos
+  // ids que o usuário pode ver (setArticleStates já ignora os demais).
+  const allowed = await db.article.findMany({ where: { id: { in: ids }, ...accessibleArticles(user.id) }, select: { id: true } });
+  await markStorySiblingsReadMany(user.id, allowed.map((a) => a.id));
 }
 
 export async function setSaved(articleId: string, isSaved: boolean) {

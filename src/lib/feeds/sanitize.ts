@@ -1,32 +1,17 @@
+import parseSrcsetSpec from "parse-srcset";
 import sanitizeHtml from "sanitize-html";
 
 const EMBED_HOSTS = ["www.youtube.com", "www.youtube-nocookie.com", "player.vimeo.com"];
 
 /**
- * Candidatos de um srcset. A URL vai até o primeiro espaço e pode conter vírgulas (data:,
- * Cloudinary "w_400,c_fill"); vírgulas no fim da URL ou depois do descritor separam candidatos.
+ * Candidatos de um srcset, com o mesmo parser (parse-srcset, segue a especificação) que o
+ * sanitize-html usa depois para validar: URLs podem conter vírgulas (data:, Cloudinary).
  */
 export function parseSrcset(value: string): { url: string; descriptor: string }[] {
-  const out: { url: string; descriptor: string }[] = [];
-  let i = 0;
-  while (i < value.length) {
-    while (i < value.length && /[\s,]/.test(value[i])) i++;
-    if (i >= value.length) break;
-    let end = i;
-    while (end < value.length && !/\s/.test(value[end])) end++;
-    let url = value.slice(i, end);
-    i = end;
-    let descriptor = "";
-    if (url.endsWith(",")) {
-      url = url.replace(/,+$/, "");
-    } else {
-      const comma = value.indexOf(",", i);
-      descriptor = value.slice(i, comma === -1 ? value.length : comma).trim();
-      i = comma === -1 ? value.length : comma + 1;
-    }
-    if (url) out.push({ url, descriptor });
-  }
-  return out;
+  return parseSrcsetSpec(value).map((c) => ({
+    url: c.url,
+    descriptor: c.w !== undefined ? `${c.w}w` : c.d !== undefined ? `${c.d}x` : c.h !== undefined ? `${c.h}h` : "",
+  }));
 }
 
 export function sanitizeArticleHtml(html: string, baseUrl?: string | null): string {

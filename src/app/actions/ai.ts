@@ -6,7 +6,7 @@ import { generateText } from "ai";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { decrypt, encrypt } from "@/lib/crypto";
-import { requireAdmin, requireUser } from "@/lib/session";
+import { isAdminNow, requireAdmin, requireUser } from "@/lib/session";
 import { createModel, listModels, listModelsFor, PROVIDER_TYPES } from "@/lib/ai/providers";
 import { errorMessage } from "@/lib/ai/content";
 import { generateDigest } from "@/lib/ai/digest";
@@ -45,7 +45,7 @@ async function editableProvider(id: string) {
   const user = await requireUser();
   const provider = await db.aiProvider.findUnique({ where: { id } });
   if (!provider) throw new ProviderActionError("providerNotFound");
-  const canEdit = provider.userId ? provider.userId === user.id : user.role === "admin";
+  const canEdit = provider.userId ? provider.userId === user.id : await isAdminNow(user.id);
   if (!canEdit) throw new ProviderActionError("noPermission");
   return { user, provider };
 }
@@ -57,7 +57,7 @@ export async function saveProviderAction(input: z.input<typeof providerSchema>) 
   if (!parsed.success) return { ok: false as const, error: actionErrorMessage(t, parsed.error) };
   const { id, scope, apiKey, baseUrl, defaultModel, ...rest } = parsed.data;
 
-  if (scope === "global" && user.role !== "admin") return { ok: false as const, error: t("adminsOnly") };
+  if (scope === "global" && !(await isAdminNow(user.id))) return { ok: false as const, error: t("adminsOnly") };
   if (rest.type === "openai_compatible" && !baseUrl) return { ok: false as const, error: t("baseUrlRequired") };
 
   const data = {
