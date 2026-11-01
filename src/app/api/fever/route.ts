@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { sanitizeArticleHtml } from "@/lib/feeds/sanitize";
-import { clientKeyOf, userFromFeverKey, type ApiUser } from "@/lib/api/tokens";
+import { userFromFeverKey, type ApiUser } from "@/lib/api/tokens";
 import { articleIdsFromNums, ensureMissingRefs, refIdFromNum, refNums } from "@/lib/api/refs";
 import { accessibleArticles, setArticleStates } from "@/lib/article-state";
 
@@ -139,7 +139,7 @@ async function mark(user: ApiUser, p: URLSearchParams) {
 
 async function handle(request: Request) {
   const p = await params(request);
-  const user = await userFromFeverKey(p.get("api_key"), clientKeyOf(request));
+  const user = await userFromFeverKey(p.get("api_key"));
   const base = { api_version: 3, auth: user ? 1 : 0 };
   if (!user) return Response.json(base);
 

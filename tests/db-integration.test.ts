@@ -21,6 +21,7 @@ vi.mock("@/lib/session", () => ({
     if (currentUser.role !== "admin") throw new Error("not admin");
     return currentUser;
   },
+  isAdminNow: async () => currentUser.role === "admin",
 }));
 vi.mock("next/cache", () => ({ revalidatePath: () => {} }));
 vi.mock("next-intl/server", () => ({

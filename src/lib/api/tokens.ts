@@ -20,54 +20,65 @@ const validCache = new Map<string, string>();
 /** Credenciais recusadas há pouco (por sha256): um app mal configurado repetindo não custa scrypt. */
 const rejected = new Map<string, number>();
 const REJECTED_TTL_MS = 10 * 60_000;
+
 /**
- * Scrypts para valores desconhecidos (o scrypt usa o threadpool da libuv, o mesmo do DNS): até 20
- * por minuto por cliente e um teto global alto. O limite por cliente impede que alguém esgote o
- * global e trave os apps legítimos; o global segura quem forja o cabeçalho de IP.
+ * Scrypt de valores desconhecidos com concorrência limitada e fila curta. O scrypt usa o
+ * threadpool da libuv (o mesmo do DNS): no máximo 2 rodam juntos, e os demais esperam a vez em
+ * vez de serem recusados. Só uma enxurrada que enche a fila é recusada. Diferente de um limite por
+ * minuto, não deixa ninguém trancar os apps legítimos por um minuto inteiro, e não depende de IP
+ * (que sem proxy não existe aqui e, com proxy, pode ser forjado no X-Forwarded-For).
  */
-const MAX_UNKNOWN_PER_CLIENT = 20;
-const MAX_UNKNOWN_GLOBAL = 600;
-const unknownWindows = new Map<string, { start: number; count: number }>();
+const MAX_CONCURRENT_UNKNOWN = 2;
+const MAX_QUEUED_UNKNOWN = 50;
+let runningUnknown = 0;
+const waitingUnknown: (() => void)[] = [];
 
-function overLimit(clientKey: string, now: number) {
-  const hit = (key: string, max: number) => {
-    let window = unknownWindows.get(key);
-    if (!window || now - window.start > 60_000) {
-      window = { start: now, count: 0 };
-      unknownWindows.set(key, window);
-    }
-    return ++window.count > max;
-  };
-  if (unknownWindows.size > 10_000) unknownWindows.clear();
-  return hit(`client:${clientKey}`, MAX_UNKNOWN_PER_CLIENT) || hit("global", MAX_UNKNOWN_GLOBAL);
-}
-
-/** Identifica o cliente para o limite: IP do proxy reverso, se houver. */
-export function clientKeyOf(request: Request) {
-  return (request.headers.get("x-forwarded-for")?.split(",")[0] ?? request.headers.get("x-real-ip") ?? "direct").trim() || "direct";
+async function withScryptSlot<T>(fn: () => Promise<T>): Promise<T | null> {
+  if (runningUnknown >= MAX_CONCURRENT_UNKNOWN) {
+    if (waitingUnknown.length >= MAX_QUEUED_UNKNOWN) return null;
+    await new Promise<void>((resolve) => waitingUnknown.push(resolve));
+  } else {
+    runningUnknown++;
+  }
+  try {
+    return await fn();
+  } finally {
+    // Passa a vaga direto para o próximo da fila (sem liberar e disputar de novo).
+    const next = waitingUnknown.shift();
+    if (next) next();
+    else runningUnknown--;
+  }
 }
 
 const fingerprint = (value: string) => createHash("sha256").update(value).digest("hex");
 
-async function lookup(value: string, field: "secretHash" | "feverKeyHash", clientKey: string): Promise<ApiUser | null> {
-  const known = validCache.get(value);
+type Field = "secretHash" | "feverKeyHash";
+const whereFor = (field: Field, hash: string) => (field === "secretHash" ? { secretHash: hash } : { feverKeyHash: hash });
+
+async function lookup(value: string, field: Field): Promise<ApiUser | null> {
+  // Chave por tipo: a mesma string enviada como senha GReader e como api_key Fever são coisas distintas.
+  const cacheKey = `${field}:${value}`;
+  const known = validCache.get(cacheKey);
   if (known) {
-    const user = await resolve(field === "secretHash" ? { secretHash: known } : { feverKeyHash: known });
-    if (!user) validCache.delete(value); // token revogado
+    const user = await resolve(whereFor(field, known));
+    if (!user) validCache.delete(cacheKey); // token revogado
     return user;
   }
   const now = Date.now();
-  const key = fingerprint(value);
+  const key = fingerprint(cacheKey);
   if ((rejected.get(key) ?? 0) > now) return null;
-  if (overLimit(clientKey, now)) return null;
 
-  const hash = await storageHash(value);
-  const user = await resolve(field === "secretHash" ? { secretHash: hash } : { feverKeyHash: hash });
+  const hash = await withScryptSlot(() => storageHash(value));
+  if (hash === null) return null;
+  const user = await resolve(whereFor(field, hash));
   if (user) {
     if (validCache.size >= 1000) validCache.delete(validCache.keys().next().value!);
-    validCache.set(value, hash);
+    validCache.set(cacheKey, hash);
   } else {
-    if (rejected.size >= 5000) rejected.clear();
+    if (rejected.size >= 5000) {
+      for (const [k, until] of rejected) if (until <= now) rejected.delete(k);
+      if (rejected.size >= 5000) rejected.delete(rejected.keys().next().value!);
+    }
     rejected.set(key, now + REJECTED_TTL_MS);
   }
   return user;
@@ -108,11 +119,11 @@ async function resolve(where: { secretHash: string } | { feverKeyHash: string })
 }
 
 /** Senha de aplicativo (Google Reader: ClientLogin e cabeçalho GoogleLogin auth=). */
-export async function userFromAppPassword(password: string | null | undefined, clientKey = "direct") {
-  return password ? lookup(password, "secretHash", clientKey) : null;
+export async function userFromAppPassword(password: string | null | undefined) {
+  return password ? lookup(password, "secretHash") : null;
 }
 
 /** api_key da Fever. */
-export async function userFromFeverKey(apiKey: string | null | undefined, clientKey = "direct") {
-  return apiKey && /^[0-9a-f]{32}$/i.test(apiKey) ? lookup(apiKey.toLowerCase(), "feverKeyHash", clientKey) : null;
+export async function userFromFeverKey(apiKey: string | null | undefined) {
+  return apiKey && /^[0-9a-f]{32}$/i.test(apiKey) ? lookup(apiKey.toLowerCase(), "feverKeyHash") : null;
 }

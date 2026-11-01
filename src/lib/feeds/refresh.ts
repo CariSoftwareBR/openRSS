@@ -42,11 +42,11 @@ function isUniqueConflict(error: unknown) {
 type RefreshResult = { newArticleIds: string[]; error?: string };
 
 /** Insere artigos novos (dedupe por feedId+guid) e retorna os ids criados. */
-export async function ingestItems(feedId: string, items: ParsedFeed["items"]): Promise<string[]> {
+export async function ingestItems(feedId: string, items: ParsedFeed["items"], retentionFrom?: Date): Promise<string[]> {
   if (items.length === 0) return [];
   // Itens mais antigos que a retenção ficam de fora: a limpeza noturna os apagaria e, como o XML
   // ainda os traz, voltariam no refresh seguinte como "novos" (não lidos e novos para Fever/GReader).
-  const cutoff = await retentionCutoff();
+  const cutoff = retentionFrom ?? (await retentionCutoff());
   const unique = [...new Map(items.filter((i) => i.publishedAt >= cutoff).map((i) => [i.guid, i])).values()];
   const created: string[] = [];
   for (const item of unique) {
@@ -140,32 +140,35 @@ async function refreshFeedUnlocked(feedId: string): Promise<RefreshResult> {
     });
 
     const next = new Date(Date.now() + nextFetchDelayMinutes(refreshIntervalMinutes, res.headers.get("cache-control")) * 60_000);
-    // 301/308: passa a buscar no endereço novo (se nenhum outro feed já usa essa URL).
-    const movedTo = res.movedPermanently && res.url !== feed.url && !(await db.feed.findUnique({ where: { url: res.url }, select: { id: true } }))
-      ? res.url
-      : undefined;
+    // 301/308: passa a buscar no endereço novo. Se outro feed já usa essa URL (ou outro refresh a
+    // tomou ao mesmo tempo), o conflito de unicidade só mantém a URL antiga: não é falha do feed.
+    if (res.movedPermanently && res.url !== feed.url) {
+      await db.feed.update({ where: { id: feedId }, data: { url: res.url } }).catch((error) => {
+        if (!isUniqueConflict(error)) throw error;
+      });
+    }
     if (res.status === 304) {
       await db.feed.update({
         where: { id: feedId },
-        data: { url: movedTo, lastFetchedAt: new Date(), nextFetchAt: next, errorCount: 0, lastError: null },
+        data: { lastFetchedAt: new Date(), nextFetchAt: next, errorCount: 0, lastError: null },
       });
       await markStaleUnread(feedId);
       return { newArticleIds: [] };
     }
 
     let stored = new Map<string, Date>();
+    const cutoff = await retentionCutoff();
     const parsed = await parseFeed(res.body, res.url, {
       existing: async (guids) => (stored = await storedGuids(feedId, guids)),
-      skipBefore: await retentionCutoff(),
+      skipBefore: cutoff,
     });
     await fixKnownDates(feedId, parsed.known, stored);
-    const createdIds = await ingestItems(feedId, parsed.items);
+    const createdIds = await ingestItems(feedId, parsed.items, cutoff);
     await markStaleUnread(feedId);
     const newArticleIds = await freshCreatedIds(createdIds);
     await db.feed.update({
       where: { id: feedId },
       data: {
-        url: movedTo,
         title: parsed.title || feed.title,
         siteUrl: parsed.siteUrl ?? feed.siteUrl,
         description: parsed.description ?? feed.description,
@@ -235,13 +238,18 @@ export async function subscribe(
 ) {
   let feed = await db.feed.findUnique({ where: { url } });
   let parsed = opts.parsed;
-  if (!feed) {
-    parsed =
-      parsed ??
-      (await (async () => {
-        const res = await safeFetch(url);
-        return parseFeed(res.body, res.url);
-      })());
+  if (!feed && !parsed) {
+    const res = await safeFetch(url);
+    // Endereço antigo de um feed que mudou (301/308): usa o feed já cadastrado na URL nova em vez
+    // de criar um duplicado com os mesmos artigos.
+    if (res.movedPermanently) {
+      const moved = await db.feed.findUnique({ where: { url: res.url } });
+      if (moved) {
+        url = res.url;
+        feed = moved;
+      }
+    }
+    if (!feed) parsed = await parseFeed(res.body, res.url);
   }
   const { refreshIntervalMinutes } = await getAppSettings();
   const initial = feed;

@@ -25,7 +25,7 @@ export type UpdateInfo = {
 type Release = { tag: string; notes: string; url: string; publishedAt: string | null };
 
 const globalForUpdates = globalThis as unknown as {
-  openrssRelease?: { checkedAt: number; release: Release | null; pending?: Promise<void> };
+  openrssRelease?: { checkedAt: number; release: Release | null; pending?: Promise<boolean> };
 };
 
 export function updateCheckEnabled() {
@@ -69,14 +69,18 @@ async function fetchLatestRelease(): Promise<Release | null> {
   };
 }
 
-/** Atualiza o cache em segundo plano (uma busca por vez; no máximo a cada 12 h, 1 h após falha). */
-function refreshRelease(force = false) {
+/**
+ * Atualiza o cache em segundo plano (uma busca por vez; no máximo a cada 12 h, 1 h após falha).
+ * Resolve com `false` quando o GitHub não respondeu (o cache anterior continua valendo).
+ */
+function refreshRelease(force = false): Promise<boolean> {
   const state = globalForUpdates.openrssRelease;
   if (state?.pending) return state.pending;
-  if (!force && state && Date.now() - state.checkedAt < CHECK_INTERVAL_MS) return Promise.resolve();
+  if (!force && state && Date.now() - state.checkedAt < CHECK_INTERVAL_MS) return Promise.resolve(true);
   const pending = fetchLatestRelease()
     .then((release) => {
       globalForUpdates.openrssRelease = { checkedAt: Date.now(), release };
+      return true;
     })
     .catch((err) => {
       console.error("[updates]", err instanceof Error ? err.message : err);
@@ -84,6 +88,7 @@ function refreshRelease(force = false) {
         checkedAt: Date.now() - CHECK_INTERVAL_MS + RETRY_AFTER_FAILURE_MS,
         release: state?.release ?? null,
       };
+      return false;
     });
   globalForUpdates.openrssRelease = { checkedAt: state?.checkedAt ?? 0, release: state?.release ?? null, pending };
   return pending;
@@ -112,9 +117,9 @@ export function getCachedUpdate(): UpdateInfo | null {
   return toInfo(globalForUpdates.openrssRelease?.release ?? null);
 }
 
-/** Checagem manual (botão "Verificar agora"): espera a resposta do GitHub. */
+/** Checagem manual (botão "Verificar agora"): espera a resposta do GitHub e falha se ela não vier. */
 export async function checkForUpdate(): Promise<UpdateInfo | null> {
-  await refreshRelease(true);
+  if (!(await refreshRelease(true))) throw new Error("update check failed");
   return toInfo(globalForUpdates.openrssRelease?.release ?? null);
 }
 

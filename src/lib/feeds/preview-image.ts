@@ -109,18 +109,20 @@ const BACKGROUND_WINDOW_MS = 3 * 86400_000;
  * listagem já abrir com as imagens. Limitado por chamada para não martelar os sites.
  */
 export async function fillPendingPreviewImages(limit = 20) {
-  const pending = await db.article.findMany({
+  // Busca uma folga além do limite e descarta em memória os que estão esperando nova tentativa
+  // (um NOT IN com milhares de ids ficaria caro e, limitado, deixaria só os "esfriando" no topo).
+  const candidates = await db.article.findMany({
     where: {
       imageUrl: null,
       url: { not: null },
-      ...(failures.size ? { id: { notIn: [...failures.keys()].filter((id) => coolingDown(id)).slice(0, 500) } } : {}),
       publishedAt: { gte: new Date(Date.now() - BACKGROUND_WINDOW_MS) },
       feed: { subscriptions: { some: {} } },
     },
     orderBy: { publishedAt: "desc" },
-    take: limit,
+    take: limit + Math.min(failures.size, 500),
     select: { id: true, url: true },
   });
+  const pending = candidates.filter((a) => !coolingDown(a.id)).slice(0, limit);
   if (pending.length === 0) return 0;
   const found = await resolvePreviewImages(pending.map((a) => ({ id: a.id, url: a.url! })), 4);
   return Object.keys(found).length;

@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { ResizeHandle } from "@/components/ui/resize-handle";
 import { useResizableWidth } from "@/hooks/use-resizable-width";
 import { useSidebarCounts } from "@/components/sidebar-counts";
+import { usePreferredListView } from "@/components/list-view-context";
 import { ArticleList } from "./article-list";
 import { Reader } from "./reader";
 
@@ -56,6 +57,7 @@ export function ArticleWorkspace({
   const router = useRouter();
   const pathname = usePathname();
   const { refreshCounts } = useSidebarCounts();
+  const { setView: setPreferredView } = usePreferredListView();
   const [items, setItems] = useState(initial.items);
   const [hasMore, setHasMore] = useState(initial.hasMore);
   const [cursor, setCursor] = useState<ListCursor | null>(initial.nextCursor);
@@ -73,6 +75,8 @@ export function ArticleWorkspace({
   const mutationQueue = useRef(new Map<string, Promise<void>>());
   const filteredItems = useRef(new Map<string, { item: ArticleListItem; index: number }>());
   const loadingMoreRef = useRef(false);
+  /** Marcados como não lidos pelo usuário: a rolagem (lido ao rolar) não os marca de novo. */
+  const keptUnread = useRef(new Set<string>());
 
   const selectedIndex = selected ? items.findIndex((i) => i.id === selected.id) : -1;
 
@@ -207,6 +211,8 @@ export function ArticleWorkspace({
       const request = (mutationRequest.current.get(key) ?? 0) + 1;
       mutationRequest.current.set(key, request);
       setOperationError(null);
+      if (isRead) keptUnread.current.delete(id);
+      else keptUnread.current.add(id);
       if (unreadOnly && isRead) {
         if (previousItem) filteredItems.current.set(key, { item: previousItem, index: previousIndex });
         setItems((list) => list.filter((item) => item.id !== id));
@@ -356,6 +362,9 @@ export function ArticleWorkspace({
         setItems((list) => [...list, ...next.items.filter((n) => !list.some((i) => i.id === n.id))]);
         setHasMore(next.hasMore);
         setCursor(next.nextCursor);
+      } catch {
+        // Rede/sessão: avisa e mantém o botão "carregar mais" (sem derrubar a página no error boundary).
+        toast.error(t("errors.loadMoreFailed"));
       } finally {
         loadingMoreRef.current = false;
       }
@@ -378,7 +387,9 @@ export function ArticleWorkspace({
     });
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [hasMore, items.length]);
+    // Pelo cursor (muda a cada página), não pelo tamanho da lista: uma página toda agrupada ou
+    // repetida não muda o tamanho, e o observer precisa ser refeito para disparar de novo.
+  }, [hasMore, cursor]);
 
   // Marcar como lido ao rolar: o artigo que sai inteiro pelo topo da lista vira lido (em lote).
   const listLayout = selected ? "list" : "cards";
@@ -400,22 +411,30 @@ export function ArticleWorkspace({
     if (scrollReadTimer.current) clearTimeout(scrollReadTimer.current);
     flushScrollReads();
   }, [flushScrollReads]);
+  // Um único observer por modo de lista; os itens novos são só acrescentados a ele. O estado
+  // atual (lido, desmarcado pelo usuário) vem de refs, sem recriar o observer a cada mudança.
+  const itemsRef = useRef(items);
+  useEffect(() => {
+    itemsRef.current = items;
+  });
+  const scrollObserver = useRef<IntersectionObserver | null>(null);
+  const observedRows = useRef(new WeakSet<Element>());
   useEffect(() => {
     const root = listRef.current;
     if (!markReadOnScroll || !root) return;
-    const unread = new Set(items.filter((i) => !i.isRead).map((i) => i.id));
-    if (unread.size === 0) return;
+    observedRows.current = new WeakSet();
     const observer = new IntersectionObserver(
       (entries) => {
         const passed: string[] = [];
         for (const entry of entries) {
           // Lista escondida (leitor aberto em telas menores que xl): retângulos zerados não são rolagem.
           if (!entry.rootBounds || entry.rootBounds.height === 0 || entry.boundingClientRect.height === 0) continue;
+          // Só o que saiu por cima (não por baixo, ao rolar de volta).
+          if (entry.isIntersecting || entry.boundingClientRect.bottom > entry.rootBounds.top) continue;
           const id = (entry.target as HTMLElement).dataset.articleId;
-          // Saiu por cima (não por baixo, ao rolar de volta) e ainda não lido.
-          if (id && !entry.isIntersecting && entry.rootBounds && entry.boundingClientRect.bottom <= entry.rootBounds.top && unread.has(id)) {
-            passed.push(id);
-          }
+          const item = id ? itemsRef.current.find((i) => i.id === id) : undefined;
+          if (!item || item.isRead || keptUnread.current.has(item.id)) continue;
+          passed.push(item.id);
         }
         if (passed.length === 0) return;
         for (const id of passed) pendingScrollReads.current.add(id);
@@ -426,11 +445,22 @@ export function ArticleWorkspace({
       },
       { root, threshold: 0 },
     );
-    for (const el of root.querySelectorAll<HTMLElement>("[data-article-id]")) {
-      if (unread.has(el.dataset.articleId!)) observer.observe(el);
+    scrollObserver.current = observer;
+    return () => {
+      observer.disconnect();
+      scrollObserver.current = null;
+    };
+  }, [flushScrollReads, markReadOnScroll, view, listLayout]);
+  useEffect(() => {
+    const observer = scrollObserver.current;
+    const root = listRef.current;
+    if (!observer || !root) return;
+    for (const el of root.querySelectorAll("[data-article-id]")) {
+      if (observedRows.current.has(el)) continue;
+      observedRows.current.add(el);
+      observer.observe(el);
     }
-    return () => observer.disconnect();
-  }, [flushScrollReads, items, markReadOnScroll, view, listLayout]);
+  }, [items, markReadOnScroll, view, listLayout]);
 
   // Atalhos de teclado
   useEffect(() => {
@@ -475,6 +505,8 @@ export function ArticleWorkspace({
   const changeView = (next: ListView) => {
     if (next === view) return;
     setView(next);
+    // O esqueleto das próximas navegações usa este formato na hora, sem esperar o servidor.
+    setPreferredView(next);
     void updateSettingsAction({ listView: next });
   };
 

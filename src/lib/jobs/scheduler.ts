@@ -17,8 +17,17 @@ export async function startScheduler() {
   // Agrupa os artigos recentes que chegaram antes do agrupamento existir (ou de uma falha).
   // No máximo uma vez por dia: o lock não é liberado e vence em 24 h, então reinícios seguidos
   // (deploys, crash loop) não repetem o reprocessamento de milhares de títulos.
+  // Se falhar, o lock é liberado para a próxima inicialização tentar de novo.
   void acquireLock("group-stories-boot", 24 * 3600_000)
-    .then((acquired) => (acquired ? groupRecentStories() : 0))
+    .then(async (release) => {
+      if (!release) return;
+      try {
+        await groupRecentStories();
+      } catch (err) {
+        await release();
+        throw err;
+      }
+    })
     .catch((err) => console.error("[jobs] groupRecentStories", err));
 
   const log = (name: string) => (err: unknown) => console.error(`[jobs:${name}]`, err);
