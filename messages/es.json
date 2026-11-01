@@ -671,6 +671,8 @@
       "save": "Guardar",
       "groupStories": "Agrupar noticias del mismo hecho",
       "groupStoriesHint": "Muestra un único elemento cuando feeds distintos publican la misma noticia; leer una marca las demás como leídas.",
+      "markReadOnScroll": "Marcar como leído al desplazar",
+      "markReadOnScrollHint": "Al desplazar la lista, el artículo que sale por la parte superior de la pantalla se marca como leído.",
       "sso": "Inicio de sesión único (SSO)",
       "ssoLinked": "Cuenta conectada a {name}.",
       "ssoNotLinked": "Conecta tu cuenta a {name} para entrar sin contraseña.",

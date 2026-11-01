@@ -3,7 +3,7 @@
 import { getTranslations } from "next-intl/server";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
-import { markStorySiblingsRead } from "@/lib/article-state";
+import { markStorySiblingsRead, setArticleStates } from "@/lib/article-state";
 import { nextUnreadFeedId, orderedSidebarFeeds } from "@/lib/feeds/next-unread";
 import { articleScopeWhere, getArticle, getSidebarData, listArticles, type ArticleScope } from "@/lib/queries";
 
@@ -44,6 +44,13 @@ export async function setRead(articleId: string, isRead: boolean) {
   if (isRead) await markStorySiblingsRead(user.id, articleId);
   // Sem revalidatePath: a lista já está atualizada no cliente e a barra lateral busca só os
   // contadores (/api/sidebar/counts). Revalidar remontava a página inteira a cada clique.
+}
+
+/** Marca vários como lidos de uma vez (rolagem da lista). Ignora ids sem acesso. */
+export async function markReadMany(articleIds: string[]) {
+  const user = await requireUser();
+  const ids = articleIds.filter((id) => typeof id === "string").slice(0, 200);
+  await setArticleStates(user.id, ids, { isRead: true });
 }
 
 export async function setSaved(articleId: string, isSaved: boolean) {

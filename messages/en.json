@@ -671,6 +671,8 @@
       "save": "Save",
       "groupStories": "Group stories about the same event",
       "groupStoriesHint": "Shows a single item when different feeds publish the same news; reading one marks the others as read.",
+      "markReadOnScroll": "Mark as read on scroll",
+      "markReadOnScrollHint": "While scrolling the list, an article that leaves the top of the screen is marked as read.",
       "sso": "Single sign-on (SSO)",
       "ssoLinked": "Account connected to {name}.",
       "ssoNotLinked": "Connect your account to {name} to sign in without a password.",

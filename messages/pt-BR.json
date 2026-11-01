@@ -671,6 +671,8 @@
       "save": "Salvar",
       "groupStories": "Agrupar notícias do mesmo fato",
       "groupStoriesHint": "Mostra um único item quando feeds diferentes publicam a mesma notícia; ler uma marca as outras como lidas.",
+      "markReadOnScroll": "Marcar como lido ao rolar",
+      "markReadOnScrollHint": "Ao rolar a lista, o artigo que sai pelo topo da tela é marcado como lido.",
       "sso": "Login único (SSO)",
       "ssoLinked": "Conta conectada a {name}.",
       "ssoNotLinked": "Conecte sua conta a {name} para entrar sem senha.",

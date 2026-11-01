@@ -32,6 +32,7 @@ export function GeneralForm(props: {
   timezone: string;
   listView: string;
   groupStories: boolean;
+  markReadOnScroll: boolean;
   sso: { name: string; linked: boolean } | null;
   timezones: string[];
 }) {
@@ -45,6 +46,7 @@ export function GeneralForm(props: {
   const [timezone, setTimezone] = useState(props.timezone);
   const [listView, setListView] = useState(props.listView);
   const [groupStories, setGroupStories] = useState(props.groupStories);
+  const [markReadOnScroll, setMarkReadOnScroll] = useState(props.markReadOnScroll);
   const [pending, start] = useTransition();
 
   function save(e: React.FormEvent) {
@@ -52,7 +54,7 @@ export function GeneralForm(props: {
     start(async () => {
       const [a, b] = await Promise.all([
         updateProfileAction(name),
-        updateSettingsAction({ language, uiLanguage, timezone, listView: listView as "cards" | "grid" | "titles", groupStories }),
+        updateSettingsAction({ language, uiLanguage, timezone, listView: listView as "cards" | "grid" | "titles", groupStories, markReadOnScroll }),
       ]);
       const err = (!a.ok && a.error) || (!b.ok && b.error);
       if (err) {
@@ -117,6 +119,13 @@ export function GeneralForm(props: {
             <span className="font-normal text-muted-foreground">{t("groupStoriesHint")}</span>
           </Label>
           <Switch id="group-stories" checked={groupStories} onCheckedChange={setGroupStories} />
+        </div>
+        <div className="flex items-center justify-between gap-3 sm:col-span-2">
+          <Label htmlFor="mark-read-on-scroll" className="flex flex-col gap-0.5">
+            {t("markReadOnScroll")}
+            <span className="font-normal text-muted-foreground">{t("markReadOnScrollHint")}</span>
+          </Label>
+          <Switch id="mark-read-on-scroll" checked={markReadOnScroll} onCheckedChange={setMarkReadOnScroll} />
         </div>
         <div className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-foreground">{t("theme")}</span>

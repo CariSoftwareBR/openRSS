@@ -255,6 +255,7 @@ model UserSettings {
   timezone          String   @default("America/Sao_Paulo")
   listView          String   @default("cards") // "titles" | "cards" | "magazine"
   groupStories      Boolean  @default(true) // agrupa na lista artigos de fontes diferentes sobre o mesmo fato
+  markReadOnScroll  Boolean  @default(false) // marca como lido o artigo que sai da tela ao rolar a lista
   updatedAt         DateTime @updatedAt
 
   @@map("user_settings")

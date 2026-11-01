@@ -214,7 +214,7 @@ function ArticleCards({ items, loadingId, showFeed, onOpen, onToggleRead, onTogg
         const pendingImage = !a.imageUrl && !a.imageChecked && Boolean(a.url);
         const hasMedia = Boolean(a.imageUrl) || pendingImage;
         return (
-          <li key={a.id}>
+          <li key={a.id} data-article-id={a.id}>
             <article className={cn(cardSurface, a.isRead && "opacity-70 hover:opacity-100")}>
               <button
                 type="button"
@@ -288,7 +288,7 @@ function ArticleGrid({ items, loadingId, showFeed, onOpen, onToggleRead, onToggl
       {items.map((a) => {
         const pendingImage = !a.imageUrl && !a.imageChecked && Boolean(a.url);
         return (
-          <li key={a.id} className="min-w-0">
+          <li key={a.id} data-article-id={a.id} className="min-w-0">
             <article className={cn(cardSurface, "flex h-full flex-col", a.isRead && "opacity-70 hover:opacity-100")}>
               <button
                 type="button"
@@ -394,7 +394,7 @@ function ArticleTextList({ items, loadingId, showFeed, timezone, onOpen, onToggl
 
           <ul className="flex flex-col">
             {group.items.map((a) => (
-              <li key={a.id}>
+              <li key={a.id} data-article-id={a.id}>
                 <article
                   className={cn(
                     "group relative flex items-start gap-3 rounded-input px-3 py-3 transition-colors duration-200 hover:bg-accent focus-within:bg-accent",
@@ -494,7 +494,7 @@ function ArticleRows({ items, view, selectedId, loadingId, showFeed, onOpen }: P
         );
 
         return (
-          <li key={a.id} className={cn(selected && "bg-accent")}>
+          <li key={a.id} data-article-id={a.id} className={cn(selected && "bg-accent")}>
             <button
               type="button"
               onClick={() => onOpen(a.id)}

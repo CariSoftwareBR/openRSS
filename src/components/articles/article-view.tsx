@@ -45,6 +45,7 @@ export async function ArticleView({ scope, searchParams }: { scope: ArticleScope
       ttsEnabled={ttsProviders > 0}
       tagFilter={tags ? { tags, active: scope.kind === "saved" ? scope.tag : undefined } : null}
       feedError={header.lastError ? localizeError(header.lastError, locale) : null}
+      markReadOnScroll={settings.markReadOnScroll}
     />
   );
 }
