@@ -662,3 +662,23 @@ describe("semantic search", () => {
     }
   });
 });
+
+describe("maintenance", () => {
+  it("backs up SQLite only when enabled and keeps the latest three", async () => {
+    const { backupSqlite, maintainSqlite } = await import("@/lib/jobs/maintenance");
+    const { existsSync, readdirSync } = await import("node:fs");
+    process.env.OPENRSS_DATA_DIR = dataDir;
+    delete process.env.OPENRSS_SQLITE_BACKUP;
+    expect(await backupSqlite()).toBeNull();
+
+    process.env.OPENRSS_SQLITE_BACKUP = "true";
+    for (const day of ["2026-10-01", "2026-10-08", "2026-10-15", "2026-10-22"]) {
+      const file = await backupSqlite(new Date(`${day}T04:15:00Z`));
+      expect(file && existsSync(file)).toBe(true);
+    }
+    expect(readdirSync(join(dataDir, "backups")).sort()).toEqual(["openrss-2026-10-08.db", "openrss-2026-10-15.db", "openrss-2026-10-22.db"]);
+    await expect(maintainSqlite()).resolves.toBeUndefined();
+    delete process.env.OPENRSS_SQLITE_BACKUP;
+    delete process.env.OPENRSS_DATA_DIR;
+  });
+});

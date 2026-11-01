@@ -358,6 +358,9 @@
     "manager": {
       "genericError": "Error",
       "opmlDescription": "Importa suscripciones de otro lector o exporta las tuyas.",
+      "savedExportTitle": "Artículos guardados",
+      "savedExportDescription": "Descarga tus guardados como marcadores (navegador, Raindrop, Pocket) o JSON.",
+      "savedExportHtml": "Marcadores (HTML)",
       "imported": "{count, plural, =1 {1 feed importado} other {# feeds importados}}",
       "importFailed": ", {count, plural, =1 {1 falló} other {# fallaron}}",
       "import": "Importar",

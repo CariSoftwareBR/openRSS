@@ -358,6 +358,9 @@
     "manager": {
       "genericError": "Error",
       "opmlDescription": "Import subscriptions from another reader or export yours.",
+      "savedExportTitle": "Saved articles",
+      "savedExportDescription": "Download your saved articles as bookmarks (browser, Raindrop, Pocket) or JSON.",
+      "savedExportHtml": "Bookmarks (HTML)",
       "imported": "{count, plural, =1 {1 feed imported} other {# feeds imported}}",
       "importFailed": ", {count, plural, =1 {1 failed} other {# failed}}",
       "import": "Import",

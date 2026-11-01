@@ -7,6 +7,7 @@ import { groupRecentStories } from "@/lib/feeds/stories";
 import { fillPendingPreviewImages } from "@/lib/feeds/preview-image";
 import { runScheduledDigests } from "@/lib/ai/digest";
 import { acquireLock, withLock } from "./lock";
+import { backupSqlite, maintainSqlite, pruneAudioCache } from "./maintenance";
 
 const globalForJobs = globalThis as unknown as { openrssJobs?: Cron[] };
 
@@ -44,7 +45,17 @@ export async function startScheduler() {
       await withLock("retention", 30 * 60_000, async () => {
         const removed = await applyRetention();
         if (removed) console.log(`[jobs:retention] ${removed} artigos removidos`);
+        const audios = await pruneAudioCache();
+        if (audios) console.log(`[jobs:retention] ${audios} áudios antigos removidos do cache`);
+        await maintainSqlite();
       }).catch(log("retention"));
+    }),
+    // Domingo de madrugada: cópia do SQLite (só com OPENRSS_SQLITE_BACKUP=true).
+    new Cron("15 4 * * 0", { protect: true }, async () => {
+      await withLock("backup", 60 * 60_000, async () => {
+        const file = await backupSqlite();
+        if (file) console.log(`[jobs:backup] ${file}`);
+      }).catch(log("backup"));
     }),
   ];
   console.log("[jobs] agendador iniciado");

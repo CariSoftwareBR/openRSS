@@ -200,6 +200,7 @@ to `docker-compose.yml` and run `docker compose up -d` again.
 | `ALLOW_PRIVATE_FEEDS` | `false` | Allow feeds on private/localhost IPs (e.g. RSS-Bridge) |
 | `ALLOW_PRIVATE_WEBHOOKS` | `false` | Allow rule notifications to private/localhost IPs (e.g. ntfy on your LAN) |
 | `DISABLE_SCHEDULER` | `false` | Disable the internal scheduler |
+| `OPENRSS_SQLITE_BACKUP` | `false` | Weekly compact copy of the SQLite database in `<data>/backups` (keeps the last 3) |
 | `OPENRSS_UPDATE_CHECK` | `true` | New-version notice for admins (checks GitHub releases every 12 h) |
 | `OPENRSS_UPDATE_WEBHOOK_URL` | — | Webhook called by **Update now** (e.g. Watchtower `/v1/update`) |
 | `OPENRSS_UPDATE_WEBHOOK_TOKEN` | — | Sent as `Authorization: Bearer <token>` to the webhook |

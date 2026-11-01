@@ -358,6 +358,9 @@
     "manager": {
       "genericError": "Erro",
       "opmlDescription": "Importe assinaturas de outro leitor ou exporte as suas.",
+      "savedExportTitle": "Artigos salvos",
+      "savedExportDescription": "Baixe seus salvos como favoritos (navegador, Raindrop, Pocket) ou JSON.",
+      "savedExportHtml": "Favoritos (HTML)",
       "imported": "{count, plural, =1 {1 feed importado} other {# feeds importados}}",
       "importFailed": ", {count, plural, =1 {1 falhou} other {# falharam}}",
       "import": "Importar",

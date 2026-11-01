@@ -36,6 +36,8 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-}
       DISABLE_SCHEDULER: ${DISABLE_SCHEDULER:-false}
+      # Cópia semanal do SQLite em /data/backups (mantém as 3 últimas).
+      OPENRSS_SQLITE_BACKUP: ${OPENRSS_SQLITE_BACKUP:-false}
       # Aviso de nova versão para admins (consulta as releases do GitHub a cada 12 h).
       OPENRSS_UPDATE_CHECK: ${OPENRSS_UPDATE_CHECK:-true}
       # Botão "Atualizar agora": webhook que baixa a imagem nova e reinicia (ex.: Watchtower abaixo).
