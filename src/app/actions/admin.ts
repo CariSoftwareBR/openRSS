@@ -67,7 +67,10 @@ export async function createUserAction(input: z.input<typeof userSchema>) {
 export async function setUserRoleAction(userId: string, role: "user" | "admin") {
   const admin = await requireAdmin();
   if (userId === admin.id) return { ok: false as const, error: (await getTranslations("admin.errors"))("ownRole") };
-  await db.user.update({ where: { id: userId }, data: { role } });
+  // O tipo não existe em runtime: a action é um endpoint público e aceitaria qualquer string.
+  const parsed = z.enum(["user", "admin"]).safeParse(role);
+  if (!parsed.success) return { ok: false as const, error: (await getTranslations("admin.errors"))("invalidRole") };
+  await db.user.update({ where: { id: userId }, data: { role: parsed.data } });
   revalidatePath("/settings/admin");
   return { ok: true as const };
 }

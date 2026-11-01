@@ -718,7 +718,8 @@
       "passwordTooShort": "La contraseña debe tener al menos 8 caracteres.",
       "createUserFailed": "No se pudo crear el usuario.",
       "ownRole": "No puedes cambiar tu propio rol.",
-      "ownDelete": "No puedes eliminarte a ti mismo."
+      "ownDelete": "No puedes eliminarte a ti mismo.",
+      "invalidRole": "Rol no válido."
     },
     "passwordLoginDisabled": "El inicio de sesión con contraseña está desactivado (OIDC_DISABLE_PASSWORD_LOGIN): las cuentas se crean por SSO en el primer acceso.",
     "mail": {

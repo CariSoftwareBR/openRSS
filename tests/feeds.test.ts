@@ -190,3 +190,21 @@ describe("refresh scheduling", async () => {
     expect(parseRetryAfter(null, now)).toBeUndefined();
   });
 });
+
+describe("sanitizeArticleHtml extras", () => {
+  it("makes srcset and poster absolute", () => {
+    const html = sanitizeArticleHtml(
+      '<img src="/a.png" srcset="/a-1x.png 1x, /a-2x.png 2x"><video poster="/p.jpg" src="/v.mp4"></video>',
+      "https://site.test/post/1",
+    );
+    expect(html).toContain('srcset="https://site.test/a-1x.png 1x, https://site.test/a-2x.png 2x"');
+    expect(html).toContain('poster="https://site.test/p.jpg"');
+    expect(html).toContain('src="https://site.test/v.mp4"');
+  });
+
+  it("sandboxes allowed embeds and drops others", () => {
+    const html = sanitizeArticleHtml('<iframe src="https://www.youtube.com/embed/x"></iframe><iframe src="https://evil.test/x"></iframe>');
+    expect(html).toContain('sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"');
+    expect(html).not.toContain("evil.test");
+  });
+});

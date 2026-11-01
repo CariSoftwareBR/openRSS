@@ -718,7 +718,8 @@
       "passwordTooShort": "Senha com no mínimo 8 caracteres.",
       "createUserFailed": "Não foi possível criar o usuário.",
       "ownRole": "Você não pode alterar seu próprio papel.",
-      "ownDelete": "Você não pode excluir a si mesmo."
+      "ownDelete": "Você não pode excluir a si mesmo.",
+      "invalidRole": "Papel inválido."
     },
     "passwordLoginDisabled": "O login por senha está desativado (OIDC_DISABLE_PASSWORD_LOGIN): as contas são criadas pelo SSO no primeiro acesso.",
     "mail": {

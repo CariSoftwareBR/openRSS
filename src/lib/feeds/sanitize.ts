@@ -11,6 +11,21 @@ export function sanitizeArticleHtml(html: string, baseUrl?: string | null): stri
       return value;
     }
   };
+  // srcset: "url 1x, url 2x" / "url 480w"; cada URL relativa vira absoluta (senão a imagem quebra no leitor).
+  const absoluteSrcset = (value: string | undefined) =>
+    value
+      ?.split(",")
+      .map((part) => {
+        const [url, ...descriptor] = part.trim().split(/\s+/);
+        return [absolute(url), ...descriptor].join(" ");
+      })
+      .join(", ");
+  const withAbsolute = (attribs: Record<string, string>, names: string[]) => {
+    const out = { ...attribs };
+    for (const name of names) if (out[name]) out[name] = absolute(out[name]);
+    if (out.srcset) out.srcset = absoluteSrcset(out.srcset)!;
+    return out;
+  };
 
   return sanitizeHtml(html, {
     allowedTags: [
@@ -22,9 +37,10 @@ export function sanitizeArticleHtml(html: string, baseUrl?: string | null): stri
       // loading/referrerpolicy são adicionados pelo transformTags; sem estar aqui, o filtro de atributos os removeria.
       img: ["src", "srcset", "alt", "title", "width", "height", "loading", "referrerpolicy"],
       source: ["src", "srcset", "type", "media"],
-      video: ["src", "poster", "controls", "width", "height"],
-      audio: ["src", "controls"],
-      iframe: ["src", "width", "height", "allowfullscreen", "frameborder"],
+      video: ["src", "poster", "controls", "width", "height", "preload"],
+      audio: ["src", "controls", "preload"],
+      // sandbox/allow/loading vêm do transformTags (só players de vídeo conhecidos passam).
+      iframe: ["src", "width", "height", "allowfullscreen", "frameborder", "sandbox", "allow", "loading", "referrerpolicy"],
       th: ["colspan", "rowspan"],
       td: ["colspan", "rowspan"],
       "*": ["lang", "dir"],
@@ -39,7 +55,20 @@ export function sanitizeArticleHtml(html: string, baseUrl?: string | null): stri
       }),
       img: (tagName, attribs) => ({
         tagName,
-        attribs: { ...attribs, src: absolute(attribs.src ?? ""), loading: "lazy", referrerpolicy: "no-referrer" },
+        attribs: { ...withAbsolute(attribs, ["src"]), loading: "lazy", referrerpolicy: "no-referrer" },
+      }),
+      source: (tagName, attribs) => ({ tagName, attribs: withAbsolute(attribs, ["src"]) }),
+      video: (tagName, attribs) => ({ tagName, attribs: { ...withAbsolute(attribs, ["src", "poster"]), preload: "none" } }),
+      audio: (tagName, attribs) => ({ tagName, attribs: { ...withAbsolute(attribs, ["src"]), preload: "none" } }),
+      iframe: (tagName, attribs) => ({
+        tagName,
+        attribs: {
+          ...attribs,
+          sandbox: "allow-scripts allow-same-origin allow-presentation allow-popups",
+          allow: "fullscreen; encrypted-media; picture-in-picture",
+          loading: "lazy",
+          referrerpolicy: "strict-origin-when-cross-origin",
+        },
       }),
     },
     exclusiveFilter: (frame) => frame.tag === "img" && (!frame.attribs.src || /(^|\/)(pixel|spacer|tracking)\b/i.test(frame.attribs.src)),

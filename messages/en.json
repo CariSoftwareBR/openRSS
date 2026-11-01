@@ -718,7 +718,8 @@
       "passwordTooShort": "Password must have at least 8 characters.",
       "createUserFailed": "Could not create the user.",
       "ownRole": "You cannot change your own role.",
-      "ownDelete": "You cannot delete yourself."
+      "ownDelete": "You cannot delete yourself.",
+      "invalidRole": "Invalid role."
     },
     "passwordLoginDisabled": "Password sign-in is disabled (OIDC_DISABLE_PASSWORD_LOGIN): accounts are created through SSO on first sign-in.",
     "mail": {
