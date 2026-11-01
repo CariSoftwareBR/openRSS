@@ -14,7 +14,33 @@ permissions:
   packages: write
 
 jobs:
+  # A imagem só é publicada se subir e responder no /api/health.
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: openrss:smoke
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Start the container and wait for /api/health
+        run: |
+          docker run -d --name openrss -p 8285:3000 -e DATABASE_URL=file:/data/openrss.db openrss:smoke
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8285/api/health | tee /tmp/health.json | grep -q '"status":"ok"'; then
+              cat /tmp/health.json; exit 0
+            fi
+            sleep 2
+          done
+          docker logs openrss
+          exit 1
+
   publish:
+    needs: smoke
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
