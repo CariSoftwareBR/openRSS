@@ -148,7 +148,7 @@ export async function parseFeed(xml: string, feedUrl: string, opts: ParseOptions
       guid,
       url: link,
       title: (item.title && stripHtml(item.title)) || truncate(text, 80) || "(sem título)",
-      author: item.creator ?? (item as { author?: string }).author ?? null,
+      author: (item.creator ?? (item as { author?: string }).author)?.trim() || null,
       contentHtml,
       snippet: text ? truncate(text, 280) : null,
       imageUrl: imageUrl ?? null,
