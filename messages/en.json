@@ -185,7 +185,7 @@
     "renameFolderName": "Rename “{name}”",
     "folderRenamed": "Folder renamed to “{name}”",
     "refreshAllFeeds": "Refresh all feeds",
-    "feedsRefreshed": "{count, plural, =0 {No new articles} =1 {1 new article} other {# new articles}}",
+    "feedsRefreshing": "{count, plural, =0 {Feeds are already up to date} =1 {Refreshing 1 feed in the background…} other {Refreshing # feeds in the background…}}",
     "refreshFeedsFailed": "Could not refresh the feeds.",
     "viewSourceOnGithub": "View source on GitHub"
   },

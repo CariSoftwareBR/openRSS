@@ -185,7 +185,7 @@
     "renameFolderName": "Renomear “{name}”",
     "folderRenamed": "Pasta renomeada para “{name}”",
     "refreshAllFeeds": "Atualizar todos os feeds",
-    "feedsRefreshed": "{count, plural, =0 {Nenhum artigo novo} =1 {1 artigo novo} other {# artigos novos}}",
+    "feedsRefreshing": "{count, plural, =0 {Os feeds já estão em dia} =1 {Atualizando 1 feed em segundo plano…} other {Atualizando # feeds em segundo plano…}}",
     "refreshFeedsFailed": "Não foi possível atualizar os feeds.",
     "viewSourceOnGithub": "Ver código no GitHub"
   },

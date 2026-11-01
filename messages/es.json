@@ -185,7 +185,7 @@
     "renameFolderName": "Renombrar “{name}”",
     "folderRenamed": "Carpeta renombrada a “{name}”",
     "refreshAllFeeds": "Actualizar todos los feeds",
-    "feedsRefreshed": "{count, plural, =0 {Sin artículos nuevos} =1 {1 artículo nuevo} other {# artículos nuevos}}",
+    "feedsRefreshing": "{count, plural, =0 {Los feeds ya están al día} =1 {Actualizando 1 feed en segundo plano…} other {Actualizando # feeds en segundo plano…}}",
     "refreshFeedsFailed": "No se pudieron actualizar los feeds.",
     "viewSourceOnGithub": "Ver código en GitHub"
   },

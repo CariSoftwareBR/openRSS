@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { getLocale, getTranslations } from "next-intl/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
@@ -8,6 +9,7 @@ import { requireUser } from "@/lib/session";
 import { discoverFeeds } from "@/lib/feeds/discover";
 import { parseOpml } from "@/lib/feeds/opml";
 import { refreshFeed, refreshFeedsNow, subscribe } from "@/lib/feeds/refresh";
+import { processNewArticles } from "@/lib/feeds/pipeline";
 import { classifyNewArticles } from "@/lib/ai/classify";
 import { applyRulesToArticles } from "@/lib/rules/apply";
 import { actionErrorMessage } from "@/lib/action-errors";
@@ -104,16 +106,34 @@ export async function refreshFeedAction(feedId: string): Promise<Result<{ added:
   return { ok: true, added: newArticleIds.length };
 }
 
-export async function refreshAllFeedsAction(): Promise<Result<{ added: number }>> {
+/**
+ * Atualiza os feeds do usuário em segundo plano (after): responde na hora em vez de segurar a
+ * fila de server actions do cliente por minutos. Pula feeds buscados há pouco (por outro
+ * usuário ou pelo agendador) para não martelar as origens.
+ */
+export async function refreshAllFeedsAction(): Promise<Result<{ queued: number }>> {
   const user = await requireUser();
-  const subs = await db.subscription.findMany({ where: { userId: user.id }, select: { feedId: true }, distinct: ["feedId"] });
-  const newArticleIds = await refreshFeedsNow(subs.map((s) => s.feedId));
-  // Regras de texto antes de responder (a lista já volta filtrada); a IA segue em segundo plano.
-  await applyRulesToArticles(newArticleIds, "ingest").catch(() => {});
-  void classifyNewArticles(newArticleIds).catch(() => {});
-  revalidatePath("/", "layout");
-  return { ok: true, added: newArticleIds.length };
+  const recent = new Date(Date.now() - RECENT_REFRESH_MS);
+  const subs = await db.subscription.findMany({
+    where: { userId: user.id, feed: { OR: [{ lastFetchedAt: null }, { lastFetchedAt: { lt: recent } }] } },
+    select: { feedId: true },
+    distinct: ["feedId"],
+  });
+  const feedIds = subs.map((s) => s.feedId);
+  if (feedIds.length > 0) {
+    after(async () => {
+      const created = await refreshFeedsNow(feedIds).catch((err) => {
+        console.error("[refresh-all]", err);
+        return [] as string[];
+      });
+      await processNewArticles(created);
+    });
+  }
+  return { ok: true, queued: feedIds.length };
 }
+
+/** Feeds buscados há menos que isto ficam fora do "atualizar todos". */
+const RECENT_REFRESH_MS = 2 * 60_000;
 
 const folderName = z.string().trim().min(1, "nameRequired").max(60);
 

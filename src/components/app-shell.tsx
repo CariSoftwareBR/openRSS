@@ -145,7 +145,7 @@ function SidebarContent({ sidebar, user, onClose }: { sidebar: SidebarData; user
   // Arrastar e soltar feeds entre pastas (com atualização otimista).
   const [optimistic, applyMove] = useOptimistic(sidebar, moveSubscription);
   // Contadores buscados depois de abrir/marcar/salvar um artigo (sem revalidar a página toda).
-  const { counts } = useSidebarCounts();
+  const { counts, refreshCounts } = useSidebarCounts();
   const data = useMemo(() => applySidebarCounts(optimistic, counts), [optimistic, counts]);
   const [, startMove] = useTransition();
   const [dragging, setDragging] = useState<SidebarSub | null>(null);
@@ -208,8 +208,9 @@ function SidebarContent({ sidebar, user, onClose }: { sidebar: SidebarData; user
     startRefreshAll(async () => {
       const res = await refreshAllFeedsAction();
       if (res.ok) {
-        toast.success(t("feedsRefreshed", { count: res.added }));
-        router.refresh();
+        toast.success(t("feedsRefreshing", { count: res.queued }));
+        // A atualização roda no servidor depois da resposta: os contadores sobem conforme chegam artigos.
+        if (res.queued) for (const delay of [3000, 10000, 25000, 60000]) setTimeout(refreshCounts, delay);
       } else {
         toast.error(res.error || t("refreshFeedsFailed"));
       }

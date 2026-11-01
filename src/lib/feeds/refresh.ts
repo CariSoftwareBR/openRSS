@@ -23,7 +23,10 @@ type RefreshResult = { newArticleIds: string[]; error?: string };
 /** Insere artigos novos (dedupe por feedId+guid) e retorna os ids criados. */
 export async function ingestItems(feedId: string, items: ParsedFeed["items"]): Promise<string[]> {
   if (items.length === 0) return [];
-  const unique = [...new Map(items.map((i) => [i.guid, i])).values()];
+  // Itens mais antigos que a retenção ficam de fora: a limpeza noturna os apagaria e, como o XML
+  // ainda os traz, voltariam no refresh seguinte como "novos" (não lidos e novos para Fever/GReader).
+  const cutoff = await retentionCutoff();
+  const unique = [...new Map(items.filter((i) => i.publishedAt >= cutoff).map((i) => [i.guid, i])).values()];
   const created: string[] = [];
   for (const item of unique) {
     const { hasPublishDate: _hasDate, ...data } = item;
@@ -223,9 +226,14 @@ export async function subscribe(
  * Remove artigos antigos que não foram salvos por nenhum usuário e feeds sem assinantes.
  * Feeds com artigos salvos ficam: apagar o feed apagaria os salvos em cascata.
  */
-export async function applyRetention() {
+/** Artigos publicados antes disto são removidos pela retenção (e não são mais ingeridos). */
+export async function retentionCutoff() {
   const { retentionDays } = await getAppSettings();
-  const cutoff = new Date(Date.now() - retentionDays * 86400000);
+  return new Date(Date.now() - retentionDays * 86400000);
+}
+
+export async function applyRetention() {
+  const cutoff = await retentionCutoff();
   const count = await db.$executeRaw`
     DELETE FROM "article"
     WHERE "publishedAt" < ${cutoff}

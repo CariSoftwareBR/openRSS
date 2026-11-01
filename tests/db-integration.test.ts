@@ -492,6 +492,17 @@ describe("ingest dates", () => {
     expect(+row.publishedAt).toBe(+real);
   });
 
+  it("skips items older than the retention window so they do not come back as new", async () => {
+    const feed = await createFeed("https://retention-ingest.example/feed", []);
+    const base = { url: null, title: "A", author: null, contentHtml: null, snippet: null, imageUrl: null, hasPublishDate: true };
+    const created = await ingestItems(feed.id, [
+      { ...base, guid: "ancient", publishedAt: OLD },
+      { ...base, guid: "recent", publishedAt: new Date() },
+    ]);
+    expect(created).toHaveLength(1);
+    expect((await db.article.findMany({ where: { feedId: feed.id } })).map((a) => a.guid)).toEqual(["recent"]);
+  });
+
   it("marks 14-day-old unread articles as read", async () => {
     const feed = await createFeed("https://stale-unread.example/feed", [
       { guid: "old", publishedAt: new Date(Date.now() - 20 * 86400000) },

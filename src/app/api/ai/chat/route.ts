@@ -2,6 +2,7 @@ import { convertToModelMessages, isStepCount, streamText, tool, type UIMessage }
 import { randomUUID } from "node:crypto";
 import { getLocale, getTranslations } from "next-intl/server";
 import { z } from "zod";
+import { accessibleArticles } from "@/lib/article-state";
 import { db, icontains } from "@/lib/db";
 import { getApiUser } from "@/lib/session";
 import { getUserSettings } from "@/lib/app-settings";
@@ -43,8 +44,9 @@ export async function POST(request: Request) {
   }
 
   const subscribed = { feed: { subscriptions: { some: { userId: user.id } } } };
+  // Artigos da conversa: assinados ou salvos (links avulsos salvos não têm assinatura).
   const contextArticles = await db.article.findMany({
-    where: { id: { in: parseJsonArray(thread.articleIds) }, ...subscribed },
+    where: { id: { in: parseJsonArray(thread.articleIds) }, ...accessibleArticles(user.id) },
     take: 5,
   });
 
@@ -83,7 +85,7 @@ export async function POST(request: Request) {
       description: "Lê o conteúdo completo de um artigo pelo id.",
       inputSchema: z.object({ id: z.string() }),
       execute: async ({ id }) => {
-        const a = await db.article.findFirst({ where: { id, ...subscribed } });
+        const a = await db.article.findFirst({ where: { id, ...accessibleArticles(user.id) } });
         return a ? articleText(a, 12000) : "Artigo não encontrado.";
       },
     }),
