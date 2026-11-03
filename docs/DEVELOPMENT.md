@@ -96,3 +96,12 @@ O aviso de nova versão compara a `version` do `package.json` com a última rele
 1. Atualize a versão: `npm version <x.y.z> --no-git-tag-version` (muda `package.json` e `package-lock.json`).
 2. Faça o merge na `main`, crie a tag `v<x.y.z>` e publique a release com as notas: elas aparecem no "O que há de novo".
 3. O workflow Docker publica `x.y.z`, `x.y` e `latest`.
+4. Quando o workflow da tag terminar, atualize as lojas num PR: em `deploy/umbrel/openrss/` troque `version`, `releaseNotes` e a imagem `x.y.z@sha256:<digest>`; em `deploy/casaos/docker-compose.yml` troque a imagem, `version`, `update_at` e `release_notes`. O digest do índice multi-arquitetura sai com:
+
+   ```bash
+   TOKEN=$(curl -fsS "https://ghcr.io/token?scope=repository:carisoftwarebr/openrss:pull" | sed -E 's/.*"token":"([^"]+)".*/\1/')
+   curl -fsSI -H "Authorization: Bearer $TOKEN" -H "Accept: application/vnd.oci.image.index.v1+json" \
+     https://ghcr.io/v2/carisoftwarebr/openrss/manifests/x.y.z | grep -i docker-content-digest
+   ```
+
+   Depois, envie os mesmos arquivos aos repositórios das lojas (Umbrel App Store e CasaOS AppStore).

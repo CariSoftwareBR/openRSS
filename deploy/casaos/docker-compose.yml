@@ -1,7 +1,7 @@
 name: openrss
 services:
   openrss:
-    image: ghcr.io/carisoftwarebr/openrss:0.1.1
+    image: ghcr.io/carisoftwarebr/openrss:0.1.4
     restart: unless-stopped
     network_mode: bridge
     environment:
@@ -65,10 +65,10 @@ x-casaos:
   architectures:
     - amd64
     - arm64
-  version: "0.1.1"
-  update_at: "2026-10-24"
+  version: "0.1.4"
+  update_at: "2026-11-03"
   release_notes:
-    en_US: First release in the app store.
+    en_US: Security and dependency updates. Older articles no longer come back as unread, lists load faster with infinite scroll and export, and summarize, translate, audio and chat now work on saved links.
   website: https://github.com/CariSoftwareBR/openRSS
   repo: https://github.com/CariSoftwareBR/openRSS
   support: https://github.com/CariSoftwareBR/openRSS/issues
