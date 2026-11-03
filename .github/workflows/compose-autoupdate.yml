@@ -1,0 +1,101 @@
+name: Compose auto-update
+
+# Sobe o docker-compose.yml com uma imagem antiga e confere que o Watchtower atualiza o openRSS
+# sozinho (agendamento) e pelo botão "Atualizar agora" (webhook), sem tocar em outros containers.
+on:
+  pull_request:
+    paths:
+      - docker-compose.yml
+      - .github/workflows/compose-autoupdate.yml
+  workflow_dispatch:
+  schedule:
+    - cron: "0 7 * * 1"
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/carisoftwarebr/openrss
+  OLD_TAG: "0.1.2"
+
+jobs:
+  auto-update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Prepare an outdated "latest" and a bystander container
+        run: |
+          docker pull "$IMAGE:latest"
+          echo "NEW_ID=$(docker image inspect -f '{{.Id}}' "$IMAGE:latest")" >> "$GITHUB_ENV"
+          docker pull "$IMAGE:$OLD_TAG"
+          OLD_ID=$(docker image inspect -f '{{.Id}}' "$IMAGE:$OLD_TAG")
+          echo "OLD_ID=$OLD_ID" >> "$GITHUB_ENV"
+          test "$OLD_ID" != "$(docker image inspect -f '{{.Id}}' "$IMAGE:latest")"
+          docker tag "$IMAGE:$OLD_TAG" "$IMAGE:latest"
+          # Outro app do servidor, com o rótulo do Watchtower mas sem o escopo "openrss": não pode mudar.
+          docker compose pull watchtower
+          docker pull alpine:3.19
+          docker tag alpine:3.19 alpine:latest
+          docker run -d --name bystander --label com.centurylinklabs.watchtower.enable=true alpine:latest sleep 3600
+          echo "BYSTANDER_ID=$(docker image inspect -f '{{.Id}}' alpine:3.19)" >> "$GITHUB_ENV"
+          cat > .env <<'EOF'
+          DATABASE_URL=file:/data/openrss.db
+          OPENRSS_UPDATE_WEBHOOK_TOKEN=ci-token
+          EOF
+
+      - name: Scheduled update replaces the outdated image
+        env:
+          OPENRSS_AUTO_UPDATE_SCHEDULE: "*/15 * * * * *"
+        run: |
+          docker compose up -d --pull never
+          wait_for_image() {
+            for i in $(seq 1 60); do
+              id=$(docker compose ps -q openrss | xargs -r docker inspect -f '{{.Image}}' 2>/dev/null || true)
+              [ "$id" = "$NEW_ID" ] && echo "openrss updated to $id" && return 0
+              sleep 3
+            done
+            docker compose logs watchtower; return 1
+          }
+          wait_for_image
+          for i in $(seq 1 60); do curl -fsS http://localhost:8285/api/health && exit 0; sleep 3; done
+          docker compose logs; exit 1
+
+      - name: '"Update now" webhook replaces the outdated image'
+        run: |
+          docker compose down
+          docker pull "$IMAGE:$OLD_TAG"
+          docker tag "$IMAGE:$OLD_TAG" "$IMAGE:latest"
+          # Agendamento padrão (4h): a troca só pode vir do webhook.
+          docker compose up -d --pull never
+          test "$(docker inspect -f '{{.Image}}' "$(docker compose ps -q openrss)")" = "$OLD_ID"
+          for i in $(seq 1 60); do curl -fsS http://localhost:8285/api/health && break; sleep 3; done
+          sleep 5
+          # Mesma chamada do botão (src/lib/updates.ts), feita de dentro do container do app.
+          docker compose exec -T openrss node -e '
+            fetch(process.env.OPENRSS_UPDATE_WEBHOOK_URL, {
+              method: "POST",
+              headers: { authorization: `Bearer ${process.env.OPENRSS_UPDATE_WEBHOOK_TOKEN}` },
+              signal: AbortSignal.timeout(15000),
+            }).then((r) => { console.log("webhook", r.status); process.exit(r.ok ? 0 : 1); },
+                    (e) => { console.log("webhook", e.name); process.exit(e.name === "TimeoutError" ? 0 : 1); });
+          ' || true
+          for i in $(seq 1 60); do
+            id=$(docker compose ps -q openrss | xargs -r docker inspect -f '{{.Image}}' 2>/dev/null || true)
+            if [ "$id" = "$NEW_ID" ]; then
+              echo "openrss updated to $id"
+              for j in $(seq 1 60); do curl -fsS http://localhost:8285/api/health && exit 0; sleep 3; done
+              break
+            fi
+            sleep 3
+          done
+          docker compose logs; exit 1
+
+      - name: Other containers are left alone
+        run: |
+          test "$(docker inspect -f '{{.Image}}' bystander)" = "$BYSTANDER_ID"
+          echo "bystander untouched"
+
+      - if: always()
+        run: docker compose logs watchtower | tail -50

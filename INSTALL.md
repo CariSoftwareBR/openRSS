@@ -48,9 +48,9 @@ cd openRSS
 # Use SQLite in the data volume and skip the setup wizard (kept in .env for future restarts)
 echo "DATABASE_URL=file:/data/openrss.db" > .env
 
-docker compose up -d --build
+docker compose up -d
 
-# Wait until the app answers (the first build takes a few minutes)
+# Wait until the app answers (the first start downloads the image)
 for i in $(seq 1 100); do curl -fsS http://localhost:8285/api/health >/dev/null 2>&1 && break; sleep 3; done
 curl -fsS http://localhost:8285/api/health
 ```
@@ -65,9 +65,9 @@ Set-Location openRSS
 # Use SQLite in the data volume and skip the setup wizard (kept in .env for future restarts)
 Set-Content -Path .env -Value 'DATABASE_URL=file:/data/openrss.db' -Encoding ascii
 
-docker compose up -d --build
+docker compose up -d
 
-# Wait until the app answers (the first build takes a few minutes)
+# Wait until the app answers (the first start downloads the image)
 for ($i = 0; $i -lt 100; $i++) {
   try { Invoke-RestMethod http://localhost:8285/api/health | Out-Null; break } catch { Start-Sleep 3 }
 }
@@ -98,7 +98,7 @@ Done. The data lives in the Docker volume `openrss-data` (`/data/config.json` an
 Leave out the `.env` line from step 2 and openRSS asks which database to use on the first visit:
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 docker compose logs openrss | grep -i token
 ```
 
@@ -124,16 +124,15 @@ docker compose -f docker-compose.postgres.yml up -d --build
 
 Keep the `.env` file: it holds the database password for future restarts.
 
-### Prebuilt image (GHCR)
+### Image tag and local build
 
-Skip the local build with the published image. You still need the repository for the compose files.
-In the `openrss` service, replace `build: .` with:
+`docker-compose.yml` uses the published image `ghcr.io/carisoftwarebr/openrss:latest`, which follows the
+`main` branch and is rebuilt every week with Node/Debian security patches. To stay on a release line, set
+`OPENRSS_IMAGE_TAG` in `.env` (for example `0.1`, or `0.1.3` to pin one version); automatic updates follow
+the tag you choose.
 
-```yaml
-image: ghcr.io/carisoftwarebr/openrss:latest
-```
-
-In production, prefer the immutable `sha-<full commit>` tag.
+To run your own build instead: `docker build -t ghcr.io/carisoftwarebr/openrss:local .`, set
+`OPENRSS_IMAGE_TAG=local`, remove the `watchtower` service and start with `docker compose up -d --pull never`.
 
 The image runs on `linux/amd64` and `linux/arm64`. When `/data` is a bind mount owned by another user
 (Unraid, CasaOS, TrueNAS), set `PUID` and `PGID` to that owner (Unraid: `99` and `100`): the container
@@ -157,26 +156,36 @@ The dev server runs on http://localhost:3000. See the [developer guide](docs/DEV
 
 ## Update
 
+**Automatic.** `docker-compose.yml` includes [Watchtower](https://github.com/nicholas-fedor/watchtower),
+which checks for a new image every day at 4:00 (`TZ`, default `America/Sao_Paulo`), downloads it and
+restarts openRSS. Migrations run on start and the data in the `openrss-data` volume is kept. Watchtower
+only touches containers labelled with the `openrss` scope, never the other containers on the server.
+
+| Variable | Default | Description |
+|---|---|---|
+| `OPENRSS_AUTO_UPDATE_SCHEDULE` | `0 0 4 * * *` | When to check, as cron with seconds |
+| `OPENRSS_UPDATE_WEBHOOK_TOKEN` | `openrss-update` | Secret shared by openRSS and Watchtower (only reachable inside the compose network) |
+| `TZ` | `America/Sao_Paulo` | Time zone for the schedule |
+
+To turn automatic updates off, remove the `watchtower` service. To update by hand:
+
 ```bash
-cd openRSS
-git pull
-docker compose up -d --build
+docker compose pull && docker compose up -d
 ```
 
-Migrations run automatically on start. Data in the `openrss-data` volume is kept.
-
-### New-version notice and one-click update
+### New-version notice and "Update now"
 
 Admins see a notice in the sidebar when a new release is published, with the release notes. openRSS checks GitHub at most every 12 hours, in the background; set `OPENRSS_UPDATE_CHECK=false` to turn it off. You can also check by hand in **Settings → Admin → Version**.
 
-A container cannot replace its own image, so the **Update now** button calls a webhook that does it for you. With [Watchtower](https://github.com/nicholas-fedor/watchtower) (HTTP API mode), use the commented example at the end of `docker-compose.yml` and set:
+The **Update now** button asks Watchtower to update right away (`OPENRSS_UPDATE_WEBHOOK_URL`, already set in
+`docker-compose.yml`). Without a webhook, the notice shows the command to run. On Umbrel, CasaOS and Unraid,
+update from the app store.
 
-```bash
-OPENRSS_UPDATE_WEBHOOK_URL=http://watchtower:8080/v1/update
-OPENRSS_UPDATE_WEBHOOK_TOKEN=<any secret, the same as WATCHTOWER_HTTP_API_TOKEN>
-```
+### Dokploy, Portainer, Coolify
 
-Without a webhook, the notice shows the command to run. On Umbrel, CasaOS and Unraid, update from the app store.
+Create a **Docker Compose** service, paste `docker-compose.yml` as is and set the environment variables
+(at least `BETTER_AUTH_URL=https://your-domain` and `DATABASE_URL=file:/data/openrss.db`). Point the domain
+to the `openrss` service, port `3000`.
 
 ---
 
@@ -264,7 +273,7 @@ With Ollama or LM Studio on the host and openRSS in Docker, use `http://host.doc
 | Problem | Action |
 |---|---|
 | Container won't start | `docker compose logs -f openrss` |
-| Port 8285 is already in use | Change the left side of `"8285:3000"` in `docker-compose.yml` and set `BETTER_AUTH_URL` to match |
+| Port 8285 is already in use | Set `OPENRSS_PORT` in `.env` (e.g. `8286`) and `BETTER_AUTH_URL` to match |
 | `/setup` wizard doesn't appear | Expected when `DATABASE_URL` is set or the database is already configured in `config.json` |
 | `/register` says registration is closed | An admin already exists — sign in at `/login`, or ask the admin to create your account |
 | Local feeds (RSS-Bridge) don't work | Set `ALLOW_PRIVATE_FEEDS=true` |

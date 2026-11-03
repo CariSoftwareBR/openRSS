@@ -77,11 +77,12 @@ DATABASE_PROVIDER=postgresql DATABASE_URL=postgresql://user:pass@localhost:5432/
 
 - Verifique a saúde em `GET /api/health` ou com `docker compose ps`.
 - Consulte logs com `docker compose logs -f openrss`.
-- Atualize gerando backup do volume/banco, baixando a revisão desejada e executando `docker compose up -d --build`. As migrations são aplicadas automaticamente pelo app ao iniciar.
+- O `docker-compose.yml` usa a imagem publicada e o Watchtower atualiza o openRSS sozinho (todo dia às 4h ou pelo botão "Atualizar agora"). Para atualizar à mão: `docker compose pull && docker compose up -d`. As migrations são aplicadas automaticamente pelo app ao iniciar.
 - Faça backup do volume `openrss-data` (contém `config.json` com o `APP_SECRET` e, no SQLite, o banco) e, no PostgreSQL, use as ferramentas de backup do próprio banco. Teste periodicamente a restauração.
 - Para refazer o assistente de instalação, remova a chave `database` de `/data/config.json` (mantenha `appSecret`) e reinicie o container.
 - Imagens publicadas no GHCR recebem uma tag imutável `sha-<commit completo>`, além da tag Git e de `latest` na branch padrão. Em produção, prefira a tag `sha-*` para rollback e implantação reproduzível.
-- Para usar uma tag local específica no Compose, defina `OPENRSS_IMAGE_TAG`; o padrão de builds locais é `local`, não `latest`.
+- Para fixar uma linha ou versão no Compose, defina `OPENRSS_IMAGE_TAG` (ex.: `0.1` ou `0.1.3`; o padrão é `latest`). Para testar um build local: `docker build -t ghcr.io/carisoftwarebr/openrss:local .` e `OPENRSS_IMAGE_TAG=local docker compose up -d --pull never`.
+- O workflow `Compose auto-update` sobe o `docker-compose.yml` com uma imagem antiga e confere a atualização agendada, o botão e que outros containers não são tocados.
 - Nunca versione `.env`. Apenas `.env.example`, sem segredos reais, é mantido no repositório.
 
 ## Stack

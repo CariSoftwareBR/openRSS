@@ -1,25 +1,27 @@
-# openRSS — um único container. Na primeira visita, o assistente pergunta qual banco usar
-# (SQLite ou PostgreSQL). Config, segredo e o banco SQLite ficam no volume "openrss-data".
-#   docker compose up -d --build
+# openRSS — imagem publicada + atualização automática (Watchtower). Funciona igual no Docker,
+# no Dokploy, no Portainer e no Coolify: cole este arquivo e defina BETTER_AUTH_URL.
+#   docker compose up -d
+# Na primeira visita, o assistente pergunta qual banco usar (SQLite ou PostgreSQL).
+# Config, segredo e o banco SQLite ficam no volume "openrss-data".
 services:
   openrss:
-    build:
-      context: .
-      # Baixa a imagem base mais recente a cada build (patches de segurança do Node/Debian).
-      pull: true
-    image: openrss:${OPENRSS_IMAGE_TAG:-local}
+    # "latest" acompanha a main e é reconstruída toda semana com os patches do Node/Debian.
+    # Para ficar numa versão: OPENRSS_IMAGE_TAG=0.1 (ou 0.1.3). O Watchtower segue a tag escolhida.
+    image: ghcr.io/carisoftwarebr/openrss:${OPENRSS_IMAGE_TAG:-latest}
+    pull_policy: always
     restart: unless-stopped
     ports:
-      - "8285:3000"
+      - "${OPENRSS_PORT:-8285}:3000"
     environment:
       # Opcional: se vazio, é gerado no primeiro boot e salvo em /data/config.json.
       APP_SECRET: ${APP_SECRET:-}
+      # Endereço que você abre no navegador (ex.: https://rss.exemplo.com).
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:8285}
-      # Opcional: defina para pular o assistente (ex.: postgresql://user:pass@host:5432/openrss).
+      # Opcional: defina para pular o assistente (ex.: file:/data/openrss.db ou postgresql://...).
       DATABASE_URL: ${DATABASE_URL:-}
       ALLOW_PRIVATE_FEEDS: ${ALLOW_PRIVATE_FEEDS:-false}
       ALLOW_PRIVATE_WEBHOOKS: ${ALLOW_PRIVATE_WEBHOOKS:-false}
-      # Login único (opcional): veja a tabela de variáveis no README.
+      # Login único (opcional): veja a tabela de variáveis no INSTALL.md.
       OIDC_ISSUER: ${OIDC_ISSUER:-}
       OIDC_DISCOVERY_URL: ${OIDC_DISCOVERY_URL:-}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
@@ -40,28 +42,37 @@ services:
       OPENRSS_SQLITE_BACKUP: ${OPENRSS_SQLITE_BACKUP:-false}
       # Aviso de nova versão para admins (consulta as releases do GitHub a cada 12 h).
       OPENRSS_UPDATE_CHECK: ${OPENRSS_UPDATE_CHECK:-true}
-      # Botão "Atualizar agora": webhook que baixa a imagem nova e reinicia (ex.: Watchtower abaixo).
-      OPENRSS_UPDATE_WEBHOOK_URL: ${OPENRSS_UPDATE_WEBHOOK_URL:-}
-      OPENRSS_UPDATE_WEBHOOK_TOKEN: ${OPENRSS_UPDATE_WEBHOOK_TOKEN:-}
+      # Botão "Atualizar agora": pede ao Watchtower abaixo que baixe a imagem nova e reinicie.
+      OPENRSS_UPDATE_WEBHOOK_URL: ${OPENRSS_UPDATE_WEBHOOK_URL:-http://watchtower:8080/v1/update}
+      OPENRSS_UPDATE_WEBHOOK_TOKEN: ${OPENRSS_UPDATE_WEBHOOK_TOKEN:-openrss-update}
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+      - com.centurylinklabs.watchtower.scope=openrss
     volumes:
       - openrss-data:/data
 
-  # Atualização com um clique (opcional). Use a imagem publicada no lugar do build local
-  # (image: ghcr.io/carisoftwarebr/openrss:latest) e defina no .env:
-  #   OPENRSS_UPDATE_WEBHOOK_URL=http://watchtower:8080/v1/update
-  #   OPENRSS_UPDATE_WEBHOOK_TOKEN=<um segredo qualquer>
-  # watchtower:
-  #   image: nickfedor/watchtower
-  #   restart: unless-stopped
-  #   volumes:
-  #     - /var/run/docker.sock:/var/run/docker.sock
-  #   environment:
-  #     WATCHTOWER_HTTP_API_UPDATE: "true"
-  #     WATCHTOWER_HTTP_API_TOKEN: ${OPENRSS_UPDATE_WEBHOOK_TOKEN}
-  #     WATCHTOWER_LABEL_ENABLE: "true"
-  # E no serviço openrss:
-  #   labels:
-  #     - com.centurylinklabs.watchtower.enable=true
+  # Atualiza o openRSS sozinho: todo dia às 4h (TZ) e quando o admin clica em "Atualizar agora".
+  # O escopo "openrss" faz ele ignorar todos os outros containers do servidor.
+  # Para desligar a atualização automática, remova este serviço.
+  watchtower:
+    image: nickfedor/watchtower:latest
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      TZ: ${TZ:-America/Sao_Paulo}
+      WATCHTOWER_SCOPE: openrss
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_INCLUDE_RESTARTING: "true"
+      # Cron com segundos: segundo minuto hora dia mês dia-da-semana.
+      WATCHTOWER_SCHEDULE: ${OPENRSS_AUTO_UPDATE_SCHEDULE:-0 0 4 * * *}
+      WATCHTOWER_HTTP_API_UPDATE: "true"
+      WATCHTOWER_HTTP_API_PERIODIC_POLLS: "true"
+      # Só é acessível pela rede interna do compose (a porta 8080 não é publicada).
+      WATCHTOWER_HTTP_API_TOKEN: ${OPENRSS_UPDATE_WEBHOOK_TOKEN:-openrss-update}
+    labels:
+      - com.centurylinklabs.watchtower.scope=openrss
 
 volumes:
   openrss-data:
