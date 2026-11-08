@@ -73,8 +73,8 @@ export function AddFeedDialog({
     >
       <Dialog.Trigger asChild>{trigger}</Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px]" />
-        <Dialog.Content className="fixed top-[12vh] left-1/2 z-50 flex max-h-[76vh] w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 flex-col gap-4 overflow-hidden rounded-card border border-border bg-surface p-5 shadow-card">
+        <Dialog.Overlay className="motion-overlay fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px]" />
+        <Dialog.Content className="motion-dialog fixed top-[12vh] left-1/2 z-50 flex max-h-[76vh] w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 flex-col gap-4 overflow-hidden rounded-card border border-border bg-surface p-5 shadow-card">
           <div className="flex items-start justify-between gap-4">
             <div>
               <Dialog.Title className="text-base font-semibold tracking-tight">{t("title")}</Dialog.Title>

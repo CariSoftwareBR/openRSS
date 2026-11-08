@@ -115,7 +115,7 @@ export function ChatModelPicker({
           align="end"
           sideOffset={10}
           collisionPadding={12}
-          className="z-50 flex w-[min(24rem,calc(100vw-2rem))] animate-[combobox-in_140ms_ease-out] flex-col gap-4 rounded-card border border-border bg-surface p-4 text-surface-foreground shadow-card"
+          className="z-50 flex w-[min(24rem,calc(100vw-2rem))] origin-(--radix-popover-content-transform-origin) flex-col data-[state=open]:animate-[combobox-in_200ms_var(--motion-out)] data-[state=closed]:animate-[popover-out_110ms_ease-in_forwards] gap-4 rounded-card border border-border bg-surface p-4 text-surface-foreground shadow-card"
         >
           {providers.length > 1 && (
             <div className="flex flex-col gap-1.5">

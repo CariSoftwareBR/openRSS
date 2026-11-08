@@ -194,7 +194,7 @@ export function Combobox({
           className={cn(
             "z-50 flex max-h-[min(22rem,var(--radix-popover-content-available-height))] w-[max(var(--radix-popover-trigger-width),14rem)] flex-col overflow-hidden",
             "rounded-input border border-border bg-surface text-surface-foreground shadow-card dark:shadow-none",
-            "origin-(--radix-popover-content-transform-origin) animate-[combobox-in_140ms_ease-out]",
+            "origin-(--radix-popover-content-transform-origin) data-[state=open]:animate-[combobox-in_180ms_var(--motion-out)] data-[state=closed]:animate-[popover-out_110ms_ease-in_forwards]",
           )}
         >
           {showSearch && (

@@ -10,7 +10,7 @@ import { UpdateNotice } from "@/components/update-notice";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/input";
 
-/** Versão instalada e verificação manual de atualização (Configurações → Admin). */
+/** Versão instalada e verificação manual de atualização (Configurações → Admin → Versão). */
 export function VersionSection({ version, checkEnabled, initial }: { version: string; checkEnabled: boolean; initial: UpdateInfo | null }) {
   const t = useTranslations("updates");
   const [update, setUpdate] = useState(initial);
@@ -19,7 +19,6 @@ export function VersionSection({ version, checkEnabled, initial }: { version: st
 
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="eyebrow">{t("versionTitle")}</h2>
       <Card className="flex flex-col gap-3 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-sm">{t("currentVersion", { version })}</p>

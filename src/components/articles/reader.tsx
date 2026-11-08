@@ -4,11 +4,8 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import {
   ArrowLeft,
   AudioLines,
-  Bookmark,
   ChevronDown,
   ChevronUp,
-  Circle,
-  CircleCheck,
   ExternalLink,
   FileText,
   Headphones,
@@ -31,6 +28,7 @@ import { FeedIcon } from "@/components/feed-icon";
 import { SummaryPanel, type SummaryMeta } from "./summary-panel";
 import { ArticleQA } from "./article-qa";
 import { TagEditor } from "./tag-editor";
+import { BookmarkIcon, ReadIcon } from "./state-icons";
 import { READER_WIDTH_ORDER, READER_WIDTHS, useReaderWidth } from "@/hooks/use-reader-width";
 
 /** Matéria completa (Readability). Rota GET, não server action: não segura a fila de actions. */
@@ -239,7 +237,7 @@ export function Reader({
 
   return (
     <article className="flex min-h-0 min-w-0 flex-1 flex-col bg-surface">
-      <div className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-2 sm:px-4">
+      <div className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-2 sm:px-4 lg:pr-14">
         {onClose && (
           <Button variant="ghost" size="icon-sm" aria-label={t("reader.back")} title={t("reader.back")} onClick={onClose}>
             <ArrowLeft />
@@ -257,10 +255,10 @@ export function Reader({
         )}
         <div className="flex-1" />
         <Button variant="ghost" size="icon-sm" onClick={onToggleRead} title={isRead ? t("reader.markUnread") : t("reader.markRead")} aria-label={t("reader.toggleRead")}>
-          {isRead ? <CircleCheck /> : <Circle />}
+          <ReadIcon read={isRead} />
         </Button>
         <Button variant="ghost" size="icon-sm" onClick={onToggleSaved} title={isSaved ? t("reader.unsave") : t("reader.save")} aria-label={t("reader.toggleSaved")}>
-          <Bookmark className={cn(isSaved && "fill-current text-foreground")} />
+          <BookmarkIcon saved={isSaved} />
         </Button>
         <Button
           variant="ghost"
@@ -296,7 +294,11 @@ export function Reader({
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div
           style={{ maxWidth: widthConfig.maxWidth, "--reader-font-size": widthConfig.fontSize } as React.CSSProperties}
-          className={cn("mx-auto flex w-full flex-col gap-5 px-5 py-6 transition-[max-width] duration-300 ease-out sm:px-8", standalone && "py-10")}
+          // O artigo sobe para o lugar ao abrir (o Reader é remontado a cada artigo: key no ArticleWorkspace).
+          className={cn(
+            "mx-auto flex w-full animate-[reader-in_380ms_var(--motion-out)] flex-col gap-5 px-5 py-6 transition-[max-width] duration-300 ease-out sm:px-8",
+            standalone && "py-10",
+          )}
         >
           <header className="flex flex-col gap-3">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">

@@ -3,7 +3,7 @@ import { Slot } from "radix-ui";
 import { cn } from "@/lib/utils";
 
 export const buttonVariants = cva(
-  "inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-[4px] text-sm font-medium transition-colors duration-200 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-[4px] text-sm font-medium transition-[color,background-color,border-color,opacity,box-shadow,scale] duration-200 ease-[var(--motion-out)] active:scale-[0.96] active:duration-75 disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
@@ -16,8 +16,9 @@ export const buttonVariants = cva(
         sm: "h-7 px-2.5 text-xs",
         md: "h-8 px-3",
         lg: "h-10 px-4",
-        icon: "size-8",
-        "icon-sm": "size-7",
+        // Ícones pequenos precisam de um aperto maior para o clique ser percebido.
+        icon: "size-8 active:scale-[0.88]",
+        "icon-sm": "size-7 active:scale-[0.88]",
       },
     },
     defaultVariants: { variant: "outline", size: "md" },

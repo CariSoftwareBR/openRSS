@@ -6,9 +6,11 @@ import { readSmtpConfig } from "@/lib/mail";
 import { APP_VERSION, getCachedUpdate, updateCheckEnabled } from "@/lib/updates";
 import { AdminPanel } from "./admin-panel";
 import { VersionSection } from "./version-section";
+import { ADMIN_SECTIONS, parseSection } from "../sections";
 
-export default async function AdminPage() {
+export default async function AdminPage({ searchParams }: PageProps<"/settings/admin">) {
   const admin = await requireAdmin();
+  const { section } = await searchParams;
   const [settings, users, stats] = await Promise.all([
     getAppSettings(),
     db.user.findMany({
@@ -19,16 +21,15 @@ export default async function AdminPage() {
   ]);
 
   return (
-    <>
-      <AdminPanel
-        currentUserId={admin.id}
-        settings={{ allowRegistration: settings.allowRegistration, refreshIntervalMinutes: settings.refreshIntervalMinutes }}
-        users={users.map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role, createdAt: u.createdAt, subscriptions: u._count.subscriptions }))}
-        passwordLoginDisabled={publicOidcInfo()?.passwordLoginDisabled ?? false}
-        smtpHost={readSmtpConfig()?.host ?? null}
-        stats={{ feeds: stats[0], articles: stats[1], failingFeeds: stats[2], database: getDbProvider() === "postgresql" ? "PostgreSQL" : "SQLite" }}
-      />
-      <VersionSection version={APP_VERSION} checkEnabled={updateCheckEnabled()} initial={getCachedUpdate()} />
-    </>
+    <AdminPanel
+      currentUserId={admin.id}
+      settings={{ allowRegistration: settings.allowRegistration, refreshIntervalMinutes: settings.refreshIntervalMinutes }}
+      users={users.map((u) => ({ id: u.id, name: u.name, email: u.email, role: u.role, createdAt: u.createdAt, subscriptions: u._count.subscriptions }))}
+      passwordLoginDisabled={publicOidcInfo()?.passwordLoginDisabled ?? false}
+      smtpHost={readSmtpConfig()?.host ?? null}
+      stats={{ feeds: stats[0], articles: stats[1], failingFeeds: stats[2], database: getDbProvider() === "postgresql" ? "PostgreSQL" : "SQLite" }}
+      initialSection={parseSection(ADMIN_SECTIONS, section)}
+      version={<VersionSection version={APP_VERSION} checkEnabled={updateCheckEnabled()} initial={getCachedUpdate()} />}
+    />
   );
 }

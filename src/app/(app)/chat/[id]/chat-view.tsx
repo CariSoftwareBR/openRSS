@@ -111,7 +111,7 @@ export function ChatView({
   return (
     <div className="flex h-full min-h-0 flex-col">
       {threadId && (
-        <header className="flex h-12 shrink-0 items-center gap-2 px-4">
+        <header className="flex h-12 shrink-0 items-center gap-2 px-4 lg:pr-14">
           <h1 className="min-w-0 flex-1 truncate text-sm font-medium text-muted-foreground">{title || t("untitled")}</h1>
           <form action={deleteThreadAction.bind(null, threadId)}>
             <Button type="submit" variant="ghost" size="icon-sm" title={t("deleteThread")} aria-label={t("deleteThread")}>

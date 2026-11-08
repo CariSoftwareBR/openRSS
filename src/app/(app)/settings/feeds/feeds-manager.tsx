@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, Folder as FolderIcon, FolderPlus, Inbox, Loader2, Pencil, Trash2, TriangleAlert, Upload } from "lucide-react";
+import { ArrowDownUp, Download, Folder as FolderIcon, FolderPlus, Folders, Inbox, Loader2, Pencil, Rss, Trash2, TriangleAlert, Upload } from "lucide-react";
 import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useLocale, useTranslations } from "next-intl";
@@ -17,6 +17,8 @@ import { relativeTime } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { Card, Input, Switch } from "@/components/ui/input";
+import { SegmentedTabs, segmentedPanelProps, useSectionParam, type SegmentedTab } from "@/components/ui/segmented-tabs";
+import type { FeedsSection } from "../sections";
 
 type Sub = {
   id: string;
@@ -29,7 +31,15 @@ type Sub = {
   lastError: string | null;
 };
 
-export function FeedsManager({ folders, subscriptions }: { folders: { id: string; name: string }[]; subscriptions: Sub[] }) {
+export function FeedsManager({
+  folders,
+  subscriptions,
+  initialSection,
+}: {
+  folders: { id: string; name: string }[];
+  subscriptions: Sub[];
+  initialSection?: FeedsSection;
+}) {
   const t = useTranslations("feeds.manager");
   const locale = useLocale();
   const [pending, start] = useTransition();
@@ -48,6 +58,16 @@ export function FeedsManager({ folders, subscriptions }: { folders: { id: string
 
   const allSelected = subscriptions.length > 0 && selected.size === subscriptions.length;
 
+  const sections: SegmentedTab<FeedsSection>[] = [
+    { value: "subscriptions", label: t("subscriptions", { count: subscriptions.length }), icon: Rss },
+    { value: "folders", label: t("folders", { count: folders.length }), icon: Folders },
+    { value: "transfer", label: t("sections.transfer"), icon: ArrowDownUp },
+  ];
+  const [section, changeSection] = useSectionParam(
+    sections.map((s) => s.value),
+    initialSection,
+  );
+
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>, success?: string) =>
     start(async () => {
       const res = await fn();
@@ -57,221 +77,227 @@ export function FeedsManager({ folders, subscriptions }: { folders: { id: string
 
   return (
     <div className="flex flex-col gap-6">
-      <Card className="flex flex-wrap items-center gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="font-medium">OPML</p>
-          <p className="text-xs text-muted-foreground">{t("opmlDescription")}</p>
-        </div>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".opml,.xml,text/xml,application/xml"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            const data = new FormData();
-            data.set("file", file);
-            start(async () => {
-              const res = await importOpmlAction(data);
-              if (res.ok) toast.success(t("imported", { count: res.imported }) + (res.failed ? t("importFailed", { count: res.failed }) : ""));
-              else toast.error(res.error);
-              if (fileRef.current) fileRef.current.value = "";
-            });
-          }}
-        />
-        <Button onClick={() => fileRef.current?.click()} disabled={pending}>
-          {pending ? <Loader2 className="animate-spin" /> : <Upload />} {t("import")}
-        </Button>
-        <Button asChild>
-          {/* oxlint-disable-next-line nextjs/no-html-link-for-pages -- download de arquivo, não navegação entre páginas */}
-          <a href="/api/opml/export">
-            <Download /> {t("export")}
-          </a>
-        </Button>
-      </Card>
+      <SegmentedTabs tabs={sections} value={section} onChange={changeSection} idPrefix="feeds" label={t("sections.label")} className="self-start" />
 
-      <Card className="flex flex-wrap items-center gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="font-medium">{t("savedExportTitle")}</p>
-          <p className="text-xs text-muted-foreground">{t("savedExportDescription")}</p>
-        </div>
-        <Button asChild>
-          {/* oxlint-disable-next-line nextjs/no-html-link-for-pages -- download de arquivo, não navegação entre páginas */}
-          <a href="/api/saved/export?format=html">
-            <Download /> {t("savedExportHtml")}
-          </a>
-        </Button>
-        <Button asChild>
-          {/* oxlint-disable-next-line nextjs/no-html-link-for-pages -- download de arquivo, não navegação entre páginas */}
-          <a href="/api/saved/export?format=json">
-            <Download /> JSON
-          </a>
-        </Button>
-      </Card>
-
-      <section className="flex flex-col gap-3">
-        <h2 className="eyebrow">{t("folders")}</h2>
-        <form
-          className="flex gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            run(async () => {
-              const res = await createFolderAction(newFolder);
-              if (res.ok) setNewFolder("");
-              return res;
-            });
-          }}
-        >
-          <Input value={newFolder} onChange={(e) => setNewFolder(e.target.value)} placeholder={t("newFolder")} />
-          <Button type="submit" disabled={pending || !newFolder.trim()}>
-            <FolderPlus /> {t("create")}
-          </Button>
-        </form>
-        {folders.length > 0 && (
+      <div {...segmentedPanelProps("feeds", "subscriptions", section)}>
+        <section className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-2 empty:hidden">
+            {subscriptions.length > 0 && (
+              <div className="flex items-center gap-3 text-sm">
+                <label className="flex items-center gap-2 text-muted-foreground">
+                  <Switch
+                    checked={allSelected}
+                    onCheckedChange={() => setSelected(allSelected ? new Set() : new Set(subscriptions.map((s) => s.id)))}
+                  />
+                  {t("selectAll")}
+                </label>
+                {selected.size > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={pending}
+                    onClick={() => {
+                      if (!window.confirm(t("unsubscribeManyConfirm", { count: selected.size }))) return;
+                      start(async () => {
+                        const res = await unsubscribeManyAction([...selected]);
+                        if (!res.ok) toast.error(res.error ?? t("genericError"));
+                        else {
+                          toast.success(t("unsubscribedMany", { count: res.count }));
+                          setSelected(new Set());
+                        }
+                      });
+                    }}
+                  >
+                    <Trash2 /> {t("deleteSelected", { count: selected.size })}
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
           <Card className="divide-y divide-border p-0">
-            {folders.map((f) => (
-              <div key={f.id} className="flex items-center gap-2 px-4 py-2">
-                <span className="flex-1 truncate">{f.name}</span>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={t("renameFolder")}
-                  onClick={() => {
-                    const name = window.prompt(t("renameFolderPrompt"), f.name);
-                    if (name && name !== f.name) run(() => renameFolderAction(f.id, name));
-                  }}
-                >
-                  <Pencil />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={t("deleteFolder")}
-                  onClick={() => {
-                    if (window.confirm(t("deleteFolderConfirm", { name: f.name }))) run(() => deleteFolderAction(f.id), t("folderDeleted"));
-                  }}
-                >
-                  <Trash2 />
-                </Button>
+            {subscriptions.length === 0 && <p className="px-4 py-6 text-sm text-muted-foreground">{t("noSubscriptions")}</p>}
+            {subscriptions.map((s) => (
+              <div key={s.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center">
+                <Switch
+                  className="shrink-0 sm:self-center"
+                  aria-label={t("selectFeed", { title: s.customTitle ?? s.title })}
+                  checked={selected.has(s.id)}
+                  onCheckedChange={() => toggleSelected(s.id)}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="flex items-center gap-1.5 truncate font-medium">
+                    {s.lastError && <TriangleAlert className="size-3.5 shrink-0 text-warning" aria-label={s.lastError} />}
+                    {s.customTitle ?? s.title}
+                  </p>
+                  <p className="truncate font-mono text-[0.6875rem] text-muted-foreground">{s.url}</p>
+                  <p className="text-[0.6875rem] text-muted-foreground" suppressHydrationWarning>
+                    {s.lastError
+                      ? t("error", { error: s.lastError })
+                      : s.lastFetchedAt
+                        ? t("updated", { when: relativeTime(s.lastFetchedAt, locale) })
+                        : t("neverUpdated")}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Combobox
+                    size="sm"
+                    className="w-44"
+                    aria-label={t("folder")}
+                    value={s.folderId ?? ""}
+                    searchPlaceholder={t("searchFolder")}
+                    onValueChange={(v) => run(() => updateSubscriptionAction(s.id, { folderId: v || null }))}
+                    options={[
+                      { value: "", label: t("noFolder"), icon: <Inbox /> },
+                      ...folders.map((f) => ({ value: f.id, label: f.name, icon: <FolderIcon /> })),
+                    ]}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={t("rename")}
+                    onClick={() => {
+                      const title = window.prompt(t("renameFeedPrompt"), s.customTitle ?? s.title);
+                      if (title !== null) run(() => updateSubscriptionAction(s.id, { customTitle: title }));
+                    }}
+                  >
+                    <Pencil />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={t("unsubscribe")}
+                    onClick={() => {
+                      if (!window.confirm(t("unsubscribeConfirm", { title: s.customTitle ?? s.title }))) return;
+                      start(async () => {
+                        const res = await unsubscribeAction(s.id);
+                        if (!res.ok) {
+                          toast.error(res.error ?? t("genericError"));
+                          return;
+                        }
+                        toast.success(t("unsubscribed"));
+                        setSelected((prev) => {
+                          if (!prev.has(s.id)) return prev;
+                          const next = new Set(prev);
+                          next.delete(s.id);
+                          return next;
+                        });
+                      });
+                    }}
+                  >
+                    <Trash2 />
+                  </Button>
+                </div>
               </div>
             ))}
           </Card>
-        )}
-      </section>
+        </section>
+      </div>
 
-      <section className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="eyebrow">{t("subscriptions", { count: subscriptions.length })}</h2>
-          {subscriptions.length > 0 && (
-            <div className="flex items-center gap-3 text-sm">
-              <label className="flex items-center gap-2 text-muted-foreground">
-                <Switch
-                  checked={allSelected}
-                  onCheckedChange={() => setSelected(allSelected ? new Set() : new Set(subscriptions.map((s) => s.id)))}
-                />
-                {t("selectAll")}
-              </label>
-              {selected.size > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={pending}
-                  onClick={() => {
-                    if (!window.confirm(t("unsubscribeManyConfirm", { count: selected.size }))) return;
-                    start(async () => {
-                      const res = await unsubscribeManyAction([...selected]);
-                      if (!res.ok) toast.error(res.error ?? t("genericError"));
-                      else {
-                        toast.success(t("unsubscribedMany", { count: res.count }));
-                        setSelected(new Set());
-                      }
-                    });
-                  }}
-                >
-                  <Trash2 /> {t("deleteSelected", { count: selected.size })}
-                </Button>
-              )}
-            </div>
+      <div {...segmentedPanelProps("feeds", "folders", section)}>
+        <section className="flex flex-col gap-3">
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              run(async () => {
+                const res = await createFolderAction(newFolder);
+                if (res.ok) setNewFolder("");
+                return res;
+              });
+            }}
+          >
+            <Input value={newFolder} onChange={(e) => setNewFolder(e.target.value)} placeholder={t("newFolder")} />
+            <Button type="submit" disabled={pending || !newFolder.trim()}>
+              <FolderPlus /> {t("create")}
+            </Button>
+          </form>
+          {folders.length > 0 && (
+            <Card className="divide-y divide-border p-0">
+              {folders.map((f) => (
+                <div key={f.id} className="flex items-center gap-2 px-4 py-2">
+                  <span className="flex-1 truncate">{f.name}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={t("renameFolder")}
+                    onClick={() => {
+                      const name = window.prompt(t("renameFolderPrompt"), f.name);
+                      if (name && name !== f.name) run(() => renameFolderAction(f.id, name));
+                    }}
+                  >
+                    <Pencil />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={t("deleteFolder")}
+                    onClick={() => {
+                      if (window.confirm(t("deleteFolderConfirm", { name: f.name }))) run(() => deleteFolderAction(f.id), t("folderDeleted"));
+                    }}
+                  >
+                    <Trash2 />
+                  </Button>
+                </div>
+              ))}
+            </Card>
           )}
-        </div>
-        <Card className="divide-y divide-border p-0">
-          {subscriptions.length === 0 && <p className="px-4 py-6 text-sm text-muted-foreground">{t("noSubscriptions")}</p>}
-          {subscriptions.map((s) => (
-            <div key={s.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center">
-              <Switch
-                className="shrink-0 sm:self-center"
-                aria-label={t("selectFeed", { title: s.customTitle ?? s.title })}
-                checked={selected.has(s.id)}
-                onCheckedChange={() => toggleSelected(s.id)}
-              />
-              <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-1.5 truncate font-medium">
-                  {s.lastError && <TriangleAlert className="size-3.5 shrink-0 text-warning" aria-label={s.lastError} />}
-                  {s.customTitle ?? s.title}
-                </p>
-                <p className="truncate font-mono text-[0.6875rem] text-muted-foreground">{s.url}</p>
-                <p className="text-[0.6875rem] text-muted-foreground" suppressHydrationWarning>
-                  {s.lastError
-                    ? t("error", { error: s.lastError })
-                    : s.lastFetchedAt
-                      ? t("updated", { when: relativeTime(s.lastFetchedAt, locale) })
-                      : t("neverUpdated")}
-                </p>
-              </div>
-              <div className="flex items-center gap-1">
-                <Combobox
-                  size="sm"
-                  className="w-44"
-                  aria-label={t("folder")}
-                  value={s.folderId ?? ""}
-                  searchPlaceholder={t("searchFolder")}
-                  onValueChange={(v) => run(() => updateSubscriptionAction(s.id, { folderId: v || null }))}
-                  options={[
-                    { value: "", label: t("noFolder"), icon: <Inbox /> },
-                    ...folders.map((f) => ({ value: f.id, label: f.name, icon: <FolderIcon /> })),
-                  ]}
-                />
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={t("rename")}
-                  onClick={() => {
-                    const title = window.prompt(t("renameFeedPrompt"), s.customTitle ?? s.title);
-                    if (title !== null) run(() => updateSubscriptionAction(s.id, { customTitle: title }));
-                  }}
-                >
-                  <Pencil />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={t("unsubscribe")}
-                  onClick={() => {
-                    if (!window.confirm(t("unsubscribeConfirm", { title: s.customTitle ?? s.title }))) return;
-                    start(async () => {
-                      const res = await unsubscribeAction(s.id);
-                      if (!res.ok) {
-                        toast.error(res.error ?? t("genericError"));
-                        return;
-                      }
-                      toast.success(t("unsubscribed"));
-                      setSelected((prev) => {
-                        if (!prev.has(s.id)) return prev;
-                        const next = new Set(prev);
-                        next.delete(s.id);
-                        return next;
-                      });
-                    });
-                  }}
-                >
-                  <Trash2 />
-                </Button>
-              </div>
-            </div>
-          ))}
+        </section>
+      </div>
+
+      <div {...segmentedPanelProps("feeds", "transfer", section)}>
+        <Card className="flex flex-wrap items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="font-medium">OPML</p>
+            <p className="text-xs text-muted-foreground">{t("opmlDescription")}</p>
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".opml,.xml,text/xml,application/xml"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const data = new FormData();
+              data.set("file", file);
+              start(async () => {
+                const res = await importOpmlAction(data);
+                if (res.ok) toast.success(t("imported", { count: res.imported }) + (res.failed ? t("importFailed", { count: res.failed }) : ""));
+                else toast.error(res.error);
+                if (fileRef.current) fileRef.current.value = "";
+              });
+            }}
+          />
+          <Button onClick={() => fileRef.current?.click()} disabled={pending}>
+            {pending ? <Loader2 className="animate-spin" /> : <Upload />} {t("import")}
+          </Button>
+          <Button asChild>
+            {/* oxlint-disable-next-line nextjs/no-html-link-for-pages -- download de arquivo, não navegação entre páginas */}
+            <a href="/api/opml/export">
+              <Download /> {t("export")}
+            </a>
+          </Button>
         </Card>
-      </section>
+
+        <Card className="flex flex-wrap items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="font-medium">{t("savedExportTitle")}</p>
+            <p className="text-xs text-muted-foreground">{t("savedExportDescription")}</p>
+          </div>
+          <Button asChild>
+            {/* oxlint-disable-next-line nextjs/no-html-link-for-pages -- download de arquivo, não navegação entre páginas */}
+            <a href="/api/saved/export?format=html">
+              <Download /> {t("savedExportHtml")}
+            </a>
+          </Button>
+          <Button asChild>
+            {/* oxlint-disable-next-line nextjs/no-html-link-for-pages -- download de arquivo, não navegação entre páginas */}
+            <a href="/api/saved/export?format=json">
+              <Download /> JSON
+            </a>
+          </Button>
+        </Card>
+      </div>
     </div>
   );
 }

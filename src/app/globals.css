@@ -41,6 +41,11 @@
   --shadow-control: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --tracking-eyebrow: 0;
   --eyebrow-transform: none;
+
+  /* Movimento — veja a seção "Movimento" no fim do arquivo. */
+  --motion-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --motion-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 /* Tema Dark — docs/design/DARK.md */
@@ -441,5 +446,207 @@
   & :where(th, td) {
     border: 1px solid var(--border);
     padding: 0.25rem 0.5rem;
+  }
+}
+
+/* ── Movimento ────────────────────────────────────────────────
+ * Tudo responde a um gesto: nada se move sozinho na tela.
+ * - Entradas: rápidas no início e assentando devagar (--motion-out), 200–320ms.
+ * - Saídas: mais curtas que as entradas (120–160ms), sem chamar atenção.
+ * - Confirmações pequenas (salvar, contador): um leve passo além do alvo (--motion-spring).
+ * - Um único momento marcante: a troca de tema, revelada em círculo a partir do botão.
+ */
+
+/* Diálogos (Radix): o data-state="closed" segura o desmonte até a animação de saída terminar. */
+@keyframes overlay-in {
+  from { opacity: 0; }
+}
+@keyframes overlay-out {
+  to { opacity: 0; }
+}
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+}
+@keyframes dialog-out {
+  to {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+}
+@keyframes sheet-in {
+  from { transform: translateX(-100%); }
+}
+@keyframes sheet-out {
+  to { transform: translateX(-100%); }
+}
+@keyframes popover-out {
+  to {
+    opacity: 0;
+    transform: translateY(-2px) scale(0.98);
+  }
+}
+@utility motion-overlay {
+  &[data-state="open"] { animation: overlay-in 220ms ease-out; }
+  &[data-state="closed"] { animation: overlay-out 160ms ease-in forwards; }
+}
+@utility motion-dialog {
+  &[data-state="open"] { animation: dialog-in 280ms var(--motion-out); }
+  &[data-state="closed"] { animation: dialog-out 140ms ease-in forwards; }
+}
+@utility motion-sheet {
+  &[data-state="open"] { animation: sheet-in 320ms var(--motion-out); }
+  &[data-state="closed"] { animation: sheet-out 200ms var(--motion-in-out) forwards; }
+}
+
+/* Leitor: o texto sobe para o lugar ao abrir um artigo (e ao ir para o próximo). */
+@keyframes reader-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+/* Salvar: o marcador cresce um pouco além e assenta. */
+@keyframes pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.28); }
+  100% { transform: scale(1); }
+}
+
+/* Contadores: o número novo entra de baixo quando o valor muda. */
+@keyframes count-tick {
+  from {
+    opacity: 0;
+    transform: translateY(45%);
+  }
+}
+
+/* Imagens das listas: aparecem em fade em vez de surgir de uma vez quando terminam de baixar. */
+.img-fade {
+  opacity: 0;
+  /* Inclui scale: o zoom de hover dos cards (group-hover:scale-*) usa a propriedade scale. */
+  transition:
+    opacity 420ms ease-out,
+    scale 700ms var(--motion-out);
+}
+.img-fade[data-loaded] {
+  opacity: 1;
+}
+
+/* Troca de página pelo menu: a anterior some rápido, a nova sobe de leve (React <ViewTransition> no AppShell). */
+@keyframes page-out {
+  to { opacity: 0; }
+}
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+::view-transition-old(.page-swap) {
+  animation: page-out 120ms ease-in both;
+}
+::view-transition-new(.page-swap) {
+  animation: page-in 300ms var(--motion-out) 60ms both;
+}
+
+/* Troca de tema: o novo tema se espalha num círculo que nasce no botão (ThemeToggle). */
+@keyframes theme-reveal {
+  from { clip-path: circle(0 at var(--theme-x, 100%) var(--theme-y, 0)); }
+  to { clip-path: circle(var(--theme-r, 150vmax) at var(--theme-x, 100%) var(--theme-y, 0)); }
+}
+html[data-theme-transition]::view-transition-old(root) {
+  animation: none;
+}
+html[data-theme-transition]::view-transition-new(root) {
+  animation: theme-reveal 620ms var(--motion-in-out);
+}
+
+/* Menu lateral: o fundo do item ativo desliza entre os itens (NavIndicator). No Dark, leva a barrinha à esquerda. */
+.dark .nav-indicator::before {
+  content: "";
+  position: absolute;
+  inset-block: 6px;
+  left: 0;
+  width: 2px;
+  border-radius: 9999px;
+  background: var(--primary);
+}
+
+/* Barra de navegação: corre rápido até ~70%, desacelera esperando o servidor e completa ao chegar. */
+@keyframes nav-progress-run {
+  0% { transform: scaleX(0); }
+  20% { transform: scaleX(0.45); }
+  60% { transform: scaleX(0.72); }
+  100% { transform: scaleX(0.92); }
+}
+.nav-progress {
+  pointer-events: none;
+  height: 2px;
+  transform-origin: left;
+  transform: scaleX(0);
+  opacity: 0;
+  background: linear-gradient(90deg, color-mix(in oklab, var(--primary) 40%, transparent), var(--primary));
+  box-shadow: 0 0 10px color-mix(in oklab, var(--primary) 55%, transparent);
+}
+.nav-progress[data-phase="loading"] {
+  opacity: 1;
+  animation: nav-progress-run 8s cubic-bezier(0.1, 0.7, 0.2, 1) forwards;
+}
+.nav-progress[data-phase="done"] {
+  transform: scaleX(1);
+  opacity: 0;
+  transition:
+    transform 220ms ease-out,
+    opacity 260ms ease-out 180ms;
+}
+
+/* Listas: os itens chegam em cascata (só os primeiros esperam; --i vem do índice, até 12). */
+@keyframes list-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+}
+.list-in {
+  animation: list-in 460ms var(--motion-out) both;
+  animation-delay: calc(var(--i, 0) * 32ms);
+}
+
+/* Configurações: a aba nova parte do esmaecimento da anterior e assenta subindo de leve (SettingsContent). */
+@keyframes settings-in {
+  from {
+    opacity: 0.45;
+    transform: translateY(6px);
+    filter: blur(1.5px);
+  }
+}
+
+/* Leitor: o painel entra pela direita quando um artigo é aberto a partir da lista. */
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Mantém só a cor mudando; os spinners continuam girando para indicar carregamento. */
+  *:not(.animate-spin),
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }

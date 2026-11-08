@@ -1,6 +1,6 @@
 import { getTranslations } from "next-intl/server";
 import { requireUser } from "@/lib/session";
-import { SettingsTabs } from "./tabs";
+import { SettingsContent, SettingsTabs } from "./tabs";
 
 export async function generateMetadata() {
   const t = await getTranslations("metadata");
@@ -25,7 +25,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
           </a>
         </div>
         <SettingsTabs isAdmin={user.role === "admin"} />
-        {children}
+        <SettingsContent>{children}</SettingsContent>
       </div>
     </div>
   );

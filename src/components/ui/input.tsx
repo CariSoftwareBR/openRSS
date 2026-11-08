@@ -84,7 +84,7 @@ export function Switch({
       {name && <input type="hidden" name={name} value={checked ? "on" : ""} />}
       <span
         className={cn(
-          "block size-3.5 rounded-full bg-background shadow transition-transform duration-200 dark:bg-foreground",
+          "block size-3.5 rounded-full bg-background shadow transition-[translate,background-color] duration-300 ease-[var(--motion-spring)] dark:bg-foreground",
           checked ? "translate-x-4 dark:bg-background" : "translate-x-0.5",
         )}
       />

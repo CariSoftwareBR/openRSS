@@ -1,6 +1,6 @@
 "use client";
 
-import { Headphones, Loader2, Pencil, Plus, ShieldCheck, Trash2, Zap } from "lucide-react";
+import { Headphones, Loader2, Pencil, Plus, ScanSearch, ShieldCheck, SlidersHorizontal, Trash2, Zap } from "lucide-react";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
@@ -20,6 +20,8 @@ import { Button } from "@/components/ui/button";
 import { Combobox } from "@/components/ui/combobox";
 import { ModelCombobox } from "@/components/model-combobox";
 import { Card, Field, Input, Switch, Textarea } from "@/components/ui/input";
+import { SegmentedTabs, segmentedPanelProps, useSectionParam, type SegmentedTab } from "@/components/ui/segmented-tabs";
+import type { AiSection } from "../sections";
 
 type ProviderType = "openai" | "anthropic" | "openrouter" | "openai_compatible";
 type Meta = Record<ProviderType, { label: string; defaultBaseUrl: string; needsBaseUrl: boolean; modelHint: string }>;
@@ -69,6 +71,8 @@ export function AiSettings({
   settings,
   systemDefaultModel,
   mailConfigured = false,
+  initialSection,
+  semanticSearch,
 }: {
   providers: ProviderRow[];
   ttsProviders: TtsProviderRow[];
@@ -78,6 +82,9 @@ export function AiSettings({
   systemDefaultModel: string;
   /** Com SMTP configurado, o digest também pode ir por e-mail. */
   mailConfigured?: boolean;
+  initialSection?: AiSection;
+  /** Configuração da busca semântica (só admin); sem ela, a sub-aba não aparece. */
+  semanticSearch?: React.ReactNode;
 }) {
   const t = useTranslations("ai.settings");
   const [editing, setEditing] = useState<Partial<ProviderRow> | null>(null);
@@ -89,10 +96,21 @@ export function AiSettings({
   const [defaultProviderId, setDefaultProviderId] = useState(currentDefault?.id ?? "");
   const [defaultModelDraft, setDefaultModelDraft] = useState(systemDefaultModel);
 
+  const sections: SegmentedTab<AiSection>[] = [
+    { value: "preferences", label: t("sections.preferences"), icon: SlidersHorizontal },
+    { value: "audio", label: t("sections.audio"), icon: Headphones },
+    ...(isAdmin ? [{ value: "system" as const, label: t("sections.system"), icon: ShieldCheck }] : []),
+    ...(semanticSearch ? [{ value: "search" as const, label: t("sections.search"), icon: ScanSearch }] : []),
+  ];
+  const [section, changeSection] = useSectionParam(
+    sections.map((s) => s.value),
+    initialSection,
+  );
+
   const selectedProvider = providers.find((p) => p.id === prefs.aiProviderId) ?? providers.find((p) => p.enabled);
   const selectedDefaultProvider = providers.find((p) => p.id === defaultProviderId);
 
-  function savePrefs(e: React.FormEvent) {
+  function savePrefs(e: React.SyntheticEvent) {
     e.preventDefault();
     start(async () => {
       const res = await updateSettingsAction({
@@ -193,224 +211,238 @@ export function AiSettings({
         </Card>
       </section>
 
-      <section className="flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <h2 className="eyebrow">{t("ttsProviders")}</h2>
-          <Button size="sm" onClick={() => setEditingTts({ scope: "user", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini-tts", voice: "coral", responseFormat: "mp3", enabled: true })}>
-            <Plus /> {t("addTts")}
-          </Button>
-        </div>
-        {editingTts && <TtsProviderForm key={editingTts.id ?? "new-tts"} initial={editingTts} aiProviders={providers} isAdmin={isAdmin} onDone={() => setEditingTts(null)} />}
-        <Card className="divide-y divide-border p-0">
-          {ttsProviders.length === 0 && <p className="px-4 py-6 text-sm text-muted-foreground">{t("noTtsProviders")}</p>}
-          {ttsProviders.map((provider) => (
-            <div key={provider.id} className="flex flex-wrap items-center gap-2 px-4 py-3">
-              <Headphones className="size-4 text-ai" />
-              <div className="min-w-0 flex-1">
-                <p className="flex items-center gap-2 font-medium">
-                  {provider.name}
-                  <span className="rounded-full border border-border px-1.5 text-[0.625rem] font-normal text-muted-foreground">
-                    {provider.scope === "global" ? t("scopeGlobalTag") : t("scopeUserTag")}
-                  </span>
-                  {!provider.enabled && <span className="text-[0.625rem] text-warning">{t("disabled")}</span>}
-                </p>
-                <p className="truncate font-mono text-[0.6875rem] text-muted-foreground">{provider.model} · {provider.voice} · {provider.responseFormat} · {provider.baseUrl}</p>
-              </div>
-              <Button variant="ghost" size="sm" disabled={busyId === `tts:${provider.id}`} onClick={async () => {
-                setBusyId(`tts:${provider.id}`);
-                const res = await testTtsProviderAction(provider.id);
-                setBusyId(null);
-                if (res.ok) toast.success(t("ttsConnected", { ms: res.ms })); else toast.error(res.error);
-              }}>
-                {busyId === `tts:${provider.id}` ? <Loader2 className="animate-spin" /> : <Zap />} {t("test")}
-              </Button>
-              {provider.editable && <>
-                <Button variant="ghost" size="icon-sm" aria-label={t("edit")} onClick={() => setEditingTts(provider)}><Pencil /></Button>
-                <Button variant="ghost" size="icon-sm" aria-label={t("delete")} onClick={() => {
-                  if (!window.confirm(t("deleteTtsConfirm", { name: provider.name }))) return;
-                  start(async () => { const res = await deleteTtsProviderAction(provider.id); if (!res.ok) toast.error(res.error); });
-                }}><Trash2 /></Button>
-              </>}
-            </div>
-          ))}
-        </Card>
-        {ttsProviders.length > 0 && (
-          <Card>
-            <Field label={t("defaultTtsProvider")} hint={t("defaultTtsProviderHint")}>
-              <Combobox
-                aria-label={t("defaultTtsProvider")}
-                value={prefs.ttsProviderId ?? ""}
-                onValueChange={(value) => setPrefs({ ...prefs, ttsProviderId: value || null })}
-                options={[{ value: "", label: t("automatic"), description: t("automaticHint") }, ...ttsProviders.filter((p) => p.enabled).map((p) => ({ value: p.id, label: p.name, description: `${p.model} · ${p.voice}` }))]}
-              />
-            </Field>
-          </Card>
-        )}
-      </section>
+      <SegmentedTabs tabs={sections} value={section} onChange={changeSection} idPrefix="ai" label={t("sections.label")} className="self-start" />
 
-      {isAdmin && (
-        <section className="flex flex-col gap-3">
-          <h2 className="eyebrow">{t("systemDefaultSection")}</h2>
+      <div {...segmentedPanelProps("ai", "preferences", section)}>
+        <form onSubmit={savePrefs} className="flex flex-col gap-3">
           <Card className="grid gap-4 sm:grid-cols-2">
-            <Field label={t("systemDefaultProvider")}>
+            <Field label={t("defaultProvider")}>
               <Combobox
-                aria-label={t("systemDefaultProvider")}
-                value={defaultProviderId}
-                onValueChange={(v) => {
-                  setDefaultProviderId(v);
-                  setDefaultModelDraft(providers.find((p) => p.id === v)?.defaultModel ?? "");
-                }}
-                options={providers.map((p) => ({
-                  value: p.id,
-                  label: p.name,
-                  description: `${meta[p.type].label}${p.defaultModel ? ` · ${p.defaultModel}` : ""}`,
-                }))}
+                aria-label={t("defaultProvider")}
+                value={prefs.aiProviderId ?? ""}
+                onValueChange={(v) => setPrefs({ ...prefs, aiProviderId: v || null, aiModel: "" })}
+                options={[
+                  { value: "", label: t("automatic"), description: t("automaticHint") },
+                  ...providers
+                    .filter((p) => p.enabled)
+                    .map((p) => ({
+                      value: p.id,
+                      label: p.name,
+                      description: `${meta[p.type].label}${p.defaultModel ? ` · ${p.defaultModel}` : ""}`,
+                    })),
+                ]}
               />
             </Field>
-            <Field label={t("systemDefaultModelLabel")}>
+            <Field label={t("model")}>
               <ModelCombobox
-                value={defaultModelDraft}
-                onValueChange={setDefaultModelDraft}
-                placeholder={selectedDefaultProvider?.defaultModel ? t("providerDefault", { model: selectedDefaultProvider.defaultModel }) : undefined}
-                cacheKey={defaultProviderId || null}
+                value={prefs.aiModel}
+                onValueChange={(v) => setPrefs({ ...prefs, aiModel: v })}
+                placeholder={selectedProvider?.defaultModel ? t("providerDefault", { model: selectedProvider.defaultModel }) : undefined}
+                cacheKey={selectedProvider?.id ?? null}
                 unavailableReason={t("addProviderFirst")}
-                load={() => listModelsAction(defaultProviderId)}
+                load={() => listModelsAction(selectedProvider!.id)}
               />
             </Field>
-            <p className="text-xs text-muted-foreground sm:col-span-2">{t("setSystemDefaultHint")}</p>
-            <div className="flex flex-wrap justify-end gap-2 sm:col-span-2">
+
+            <Field className="sm:col-span-2" label={t("interests")} hint={t("interestsHint")}>
+              <Textarea
+                value={prefs.interests}
+                onChange={(e) => setPrefs({ ...prefs, interests: e.target.value })}
+                placeholder={t("interestsPlaceholder")}
+              />
+            </Field>
+
+            <label className="flex items-center justify-between gap-3 sm:col-span-2">
+              <span>
+                <span className="block font-medium">{t("classify")}</span>
+                <span className="text-xs text-muted-foreground">{t("classifyHint")}</span>
+              </span>
+              <Switch checked={prefs.classifyEnabled} onCheckedChange={(v) => setPrefs({ ...prefs, classifyEnabled: v })} />
+            </label>
+
+            <label className="flex items-center justify-between gap-3 sm:col-span-2">
+              <span>
+                <span className="block font-medium">{t("digest")}</span>
+                <span className="text-xs text-muted-foreground">{t("digestHint")}</span>
+              </span>
+              <Switch checked={prefs.digestEnabled} onCheckedChange={(v) => setPrefs({ ...prefs, digestEnabled: v })} />
+            </label>
+
+            {prefs.digestEnabled && (
+              <Field label={t("digestHour")}>
+                <Combobox
+                  aria-label={t("digestHour")}
+                  searchable={false}
+                  value={String(prefs.digestHour)}
+                  onValueChange={(v) => setPrefs({ ...prefs, digestHour: Number(v) })}
+                  options={Array.from({ length: 24 }, (_, h) => ({ value: String(h), label: `${String(h).padStart(2, "0")}:00` }))}
+                />
+              </Field>
+            )}
+
+            {prefs.digestEnabled && mailConfigured && (
+              <label className="flex items-center justify-between gap-3 sm:col-span-2">
+                <span>
+                  <span className="block font-medium">{t("digestEmail")}</span>
+                  <span className="text-xs text-muted-foreground">{t("digestEmailHint")}</span>
+                </span>
+                <Switch checked={prefs.digestEmail} onCheckedChange={(v) => setPrefs({ ...prefs, digestEmail: v })} />
+              </label>
+            )}
+          </Card>
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" variant="primary" disabled={pending}>
+              {t("savePrefs")}
+            </Button>
+            {prefs.classifyEnabled && (
               <Button
-                variant="primary"
-                disabled={pending || !defaultProviderId || !defaultModelDraft}
+                type="button"
+                disabled={pending}
                 onClick={() =>
                   start(async () => {
-                    const res = await setSystemDefaultAction(defaultProviderId, defaultModelDraft);
-                    if (res.ok) toast.success(t("systemDefaultSet"));
+                    const res = await classifyRecentAction();
+                    if (res.ok) toast.success(t("classified", { count: res.count }));
                     else toast.error(res.error);
                   })
                 }
               >
-                <ShieldCheck /> {t("setSystemDefault")}
+                {t("classifyRecent")}
               </Button>
-              {currentDefault && (
-                <Button
-                  variant="ghost"
-                  disabled={pending}
-                  onClick={() =>
-                    start(async () => {
-                      await clearSystemDefaultAction();
-                      setDefaultProviderId("");
-                      setDefaultModelDraft("");
-                      toast.success(t("systemDefaultRemoved"));
-                    })
-                  }
-                >
-                  {t("removeSystemDefault")}
-                </Button>
-              )}
-            </div>
-          </Card>
-        </section>
-      )}
+            )}
+          </div>
+        </form>
+      </div>
 
-      <form onSubmit={savePrefs} className="flex flex-col gap-3">
-        <h2 className="eyebrow">{t("preferences")}</h2>
-        <Card className="grid gap-4 sm:grid-cols-2">
-          <Field label={t("defaultProvider")}>
-            <Combobox
-              aria-label={t("defaultProvider")}
-              value={prefs.aiProviderId ?? ""}
-              onValueChange={(v) => setPrefs({ ...prefs, aiProviderId: v || null, aiModel: "" })}
-              options={[
-                { value: "", label: t("automatic"), description: t("automaticHint") },
-                ...providers
-                  .filter((p) => p.enabled)
-                  .map((p) => ({
+      <div {...segmentedPanelProps("ai", "audio", section)}>
+        <section className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <h2 className="eyebrow">{t("ttsProviders")}</h2>
+            <Button size="sm" onClick={() => setEditingTts({ scope: "user", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini-tts", voice: "coral", responseFormat: "mp3", enabled: true })}>
+              <Plus /> {t("addTts")}
+            </Button>
+          </div>
+          {editingTts && <TtsProviderForm key={editingTts.id ?? "new-tts"} initial={editingTts} aiProviders={providers} isAdmin={isAdmin} onDone={() => setEditingTts(null)} />}
+          <Card className="divide-y divide-border p-0">
+            {ttsProviders.length === 0 && <p className="px-4 py-6 text-sm text-muted-foreground">{t("noTtsProviders")}</p>}
+            {ttsProviders.map((provider) => (
+              <div key={provider.id} className="flex flex-wrap items-center gap-2 px-4 py-3">
+                <Headphones className="size-4 text-ai" />
+                <div className="min-w-0 flex-1">
+                  <p className="flex items-center gap-2 font-medium">
+                    {provider.name}
+                    <span className="rounded-full border border-border px-1.5 text-[0.625rem] font-normal text-muted-foreground">
+                      {provider.scope === "global" ? t("scopeGlobalTag") : t("scopeUserTag")}
+                    </span>
+                    {!provider.enabled && <span className="text-[0.625rem] text-warning">{t("disabled")}</span>}
+                  </p>
+                  <p className="truncate font-mono text-[0.6875rem] text-muted-foreground">{provider.model} · {provider.voice} · {provider.responseFormat} · {provider.baseUrl}</p>
+                </div>
+                <Button variant="ghost" size="sm" disabled={busyId === `tts:${provider.id}`} onClick={async () => {
+                  setBusyId(`tts:${provider.id}`);
+                  const res = await testTtsProviderAction(provider.id);
+                  setBusyId(null);
+                  if (res.ok) toast.success(t("ttsConnected", { ms: res.ms })); else toast.error(res.error);
+                }}>
+                  {busyId === `tts:${provider.id}` ? <Loader2 className="animate-spin" /> : <Zap />} {t("test")}
+                </Button>
+                {provider.editable && <>
+                  <Button variant="ghost" size="icon-sm" aria-label={t("edit")} onClick={() => setEditingTts(provider)}><Pencil /></Button>
+                  <Button variant="ghost" size="icon-sm" aria-label={t("delete")} onClick={() => {
+                    if (!window.confirm(t("deleteTtsConfirm", { name: provider.name }))) return;
+                    start(async () => { const res = await deleteTtsProviderAction(provider.id); if (!res.ok) toast.error(res.error); });
+                  }}><Trash2 /></Button>
+                </>}
+              </div>
+            ))}
+          </Card>
+          {ttsProviders.length > 0 && (
+            <Card>
+              <Field label={t("defaultTtsProvider")} hint={t("defaultTtsProviderHint")}>
+                <Combobox
+                  aria-label={t("defaultTtsProvider")}
+                  value={prefs.ttsProviderId ?? ""}
+                  onValueChange={(value) => setPrefs({ ...prefs, ttsProviderId: value || null })}
+                  options={[{ value: "", label: t("automatic"), description: t("automaticHint") }, ...ttsProviders.filter((p) => p.enabled).map((p) => ({ value: p.id, label: p.name, description: `${p.model} · ${p.voice}` }))]}
+                />
+              </Field>
+              {/* O provedor de áudio faz parte das preferências: salva aqui sem ir até a sub-aba Preferências. */}
+              <div className="mt-4 flex justify-end">
+                <Button variant="primary" disabled={pending} onClick={savePrefs}>
+                  {t("savePrefs")}
+                </Button>
+              </div>
+            </Card>
+          )}
+        </section>
+      </div>
+
+      {isAdmin && (
+        <div {...segmentedPanelProps("ai", "system", section)}>
+          <section className="flex flex-col gap-3">
+            <Card className="grid gap-4 sm:grid-cols-2">
+              <Field label={t("systemDefaultProvider")}>
+                <Combobox
+                  aria-label={t("systemDefaultProvider")}
+                  value={defaultProviderId}
+                  onValueChange={(v) => {
+                    setDefaultProviderId(v);
+                    setDefaultModelDraft(providers.find((p) => p.id === v)?.defaultModel ?? "");
+                  }}
+                  options={providers.map((p) => ({
                     value: p.id,
                     label: p.name,
                     description: `${meta[p.type].label}${p.defaultModel ? ` · ${p.defaultModel}` : ""}`,
-                  })),
-              ]}
-            />
-          </Field>
-          <Field label={t("model")}>
-            <ModelCombobox
-              value={prefs.aiModel}
-              onValueChange={(v) => setPrefs({ ...prefs, aiModel: v })}
-              placeholder={selectedProvider?.defaultModel ? t("providerDefault", { model: selectedProvider.defaultModel }) : undefined}
-              cacheKey={selectedProvider?.id ?? null}
-              unavailableReason={t("addProviderFirst")}
-              load={() => listModelsAction(selectedProvider!.id)}
-            />
-          </Field>
-
-          <Field className="sm:col-span-2" label={t("interests")} hint={t("interestsHint")}>
-            <Textarea
-              value={prefs.interests}
-              onChange={(e) => setPrefs({ ...prefs, interests: e.target.value })}
-              placeholder={t("interestsPlaceholder")}
-            />
-          </Field>
-
-          <label className="flex items-center justify-between gap-3 sm:col-span-2">
-            <span>
-              <span className="block font-medium">{t("classify")}</span>
-              <span className="text-xs text-muted-foreground">{t("classifyHint")}</span>
-            </span>
-            <Switch checked={prefs.classifyEnabled} onCheckedChange={(v) => setPrefs({ ...prefs, classifyEnabled: v })} />
-          </label>
-
-          <label className="flex items-center justify-between gap-3 sm:col-span-2">
-            <span>
-              <span className="block font-medium">{t("digest")}</span>
-              <span className="text-xs text-muted-foreground">{t("digestHint")}</span>
-            </span>
-            <Switch checked={prefs.digestEnabled} onCheckedChange={(v) => setPrefs({ ...prefs, digestEnabled: v })} />
-          </label>
-
-          {prefs.digestEnabled && (
-            <Field label={t("digestHour")}>
-              <Combobox
-                aria-label={t("digestHour")}
-                searchable={false}
-                value={String(prefs.digestHour)}
-                onValueChange={(v) => setPrefs({ ...prefs, digestHour: Number(v) })}
-                options={Array.from({ length: 24 }, (_, h) => ({ value: String(h), label: `${String(h).padStart(2, "0")}:00` }))}
-              />
-            </Field>
-          )}
-
-          {prefs.digestEnabled && mailConfigured && (
-            <label className="flex items-center justify-between gap-3 sm:col-span-2">
-              <span>
-                <span className="block font-medium">{t("digestEmail")}</span>
-                <span className="text-xs text-muted-foreground">{t("digestEmailHint")}</span>
-              </span>
-              <Switch checked={prefs.digestEmail} onCheckedChange={(v) => setPrefs({ ...prefs, digestEmail: v })} />
-            </label>
-          )}
-        </Card>
-        <div className="flex flex-wrap gap-2">
-          <Button type="submit" variant="primary" disabled={pending}>
-            {t("savePrefs")}
-          </Button>
-          {prefs.classifyEnabled && (
-            <Button
-              type="button"
-              disabled={pending}
-              onClick={() =>
-                start(async () => {
-                  const res = await classifyRecentAction();
-                  if (res.ok) toast.success(t("classified", { count: res.count }));
-                  else toast.error(res.error);
-                })
-              }
-            >
-              {t("classifyRecent")}
-            </Button>
-          )}
+                  }))}
+                />
+              </Field>
+              <Field label={t("systemDefaultModelLabel")}>
+                <ModelCombobox
+                  value={defaultModelDraft}
+                  onValueChange={setDefaultModelDraft}
+                  placeholder={selectedDefaultProvider?.defaultModel ? t("providerDefault", { model: selectedDefaultProvider.defaultModel }) : undefined}
+                  cacheKey={defaultProviderId || null}
+                  unavailableReason={t("addProviderFirst")}
+                  load={() => listModelsAction(defaultProviderId)}
+                />
+              </Field>
+              <p className="text-xs text-muted-foreground sm:col-span-2">{t("setSystemDefaultHint")}</p>
+              <div className="flex flex-wrap justify-end gap-2 sm:col-span-2">
+                <Button
+                  variant="primary"
+                  disabled={pending || !defaultProviderId || !defaultModelDraft}
+                  onClick={() =>
+                    start(async () => {
+                      const res = await setSystemDefaultAction(defaultProviderId, defaultModelDraft);
+                      if (res.ok) toast.success(t("systemDefaultSet"));
+                      else toast.error(res.error);
+                    })
+                  }
+                >
+                  <ShieldCheck /> {t("setSystemDefault")}
+                </Button>
+                {currentDefault && (
+                  <Button
+                    variant="ghost"
+                    disabled={pending}
+                    onClick={() =>
+                      start(async () => {
+                        await clearSystemDefaultAction();
+                        setDefaultProviderId("");
+                        setDefaultModelDraft("");
+                        toast.success(t("systemDefaultRemoved"));
+                      })
+                    }
+                  >
+                    {t("removeSystemDefault")}
+                  </Button>
+                )}
+              </div>
+            </Card>
+          </section>
         </div>
-      </form>
+      )}
+
+      {semanticSearch && <div {...segmentedPanelProps("ai", "search", section)}>{semanticSearch}</div>}
     </div>
   );
 }

@@ -523,8 +523,9 @@ export function ArticleWorkspace({
           !selected && "xl:w-full",
         )}
       >
-        <header className="flex flex-col gap-2 border-b border-border px-4 py-3">
-          <div className="flex items-center gap-2">
+        <header className="flex flex-col gap-2 border-b border-border px-4 pt-2.5 pb-3">
+          {/* Sem artigo aberto, esta linha chega ao canto: reserva espaço para o ThemeToggle do AppShell. */}
+          <div className={cn("flex items-center gap-2", !selected && "lg:pr-10")}>
             <h1 className="min-w-0 flex-1 truncate text-base font-semibold tracking-tight">{title}</h1>
             {scope.kind === "feed" && (
               <Button
@@ -623,17 +624,21 @@ export function ArticleWorkspace({
       </section>
 
       {selected && (
-        <Reader
-          key={selected.id}
-          article={selected}
-          aiEnabled={aiEnabled}
-          ttsEnabled={ttsEnabled}
-          onClose={close}
-          onPrev={selectedIndex > 0 ? () => move(-1) : undefined}
-          onNext={selectedIndex !== -1 && selectedIndex < items.length - 1 ? () => move(1) : undefined}
-          onToggleRead={() => toggleRead(selected.id, !(selected.state?.isRead ?? true))}
-          onToggleSaved={() => toggleSaved(selected.id, !selected.state?.isSaved)}
-        />
+        // Sem key: este painel só monta (e entra pela direita) ao abrir o primeiro artigo; trocar de
+        // artigo remonta só o Reader, que tem a própria entrada mais curta.
+        <div className="flex min-h-0 min-w-0 flex-1 animate-[panel-in_480ms_var(--motion-out)]">
+          <Reader
+            key={selected.id}
+            article={selected}
+            aiEnabled={aiEnabled}
+            ttsEnabled={ttsEnabled}
+            onClose={close}
+            onPrev={selectedIndex > 0 ? () => move(-1) : undefined}
+            onNext={selectedIndex !== -1 && selectedIndex < items.length - 1 ? () => move(1) : undefined}
+            onToggleRead={() => toggleRead(selected.id, !(selected.state?.isRead ?? true))}
+            onToggleSaved={() => toggleSaved(selected.id, !selected.state?.isSaved)}
+          />
+        </div>
       )}
     </div>
   );

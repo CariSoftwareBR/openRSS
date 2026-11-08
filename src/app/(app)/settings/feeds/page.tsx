@@ -3,9 +3,11 @@ import { db } from "@/lib/db";
 import { localizeError } from "@/lib/localized-error";
 import { requireUser } from "@/lib/session";
 import { FeedsManager } from "./feeds-manager";
+import { FEEDS_SECTIONS, parseSection } from "../sections";
 
-export default async function FeedsSettingsPage() {
+export default async function FeedsSettingsPage({ searchParams }: PageProps<"/settings/feeds">) {
   const user = await requireUser();
+  const { section } = await searchParams;
   const locale = await getLocale();
   const [folders, subscriptions] = await Promise.all([
     db.folder.findMany({ where: { userId: user.id }, orderBy: [{ position: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
@@ -18,6 +20,7 @@ export default async function FeedsSettingsPage() {
   return (
     <FeedsManager
       folders={folders}
+      initialSection={parseSection(FEEDS_SECTIONS, section)}
       subscriptions={subscriptions
         .map((s) => ({
           id: s.id,
