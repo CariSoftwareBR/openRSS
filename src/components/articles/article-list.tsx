@@ -1,12 +1,13 @@
 "use client";
 
-import { Bookmark, ChevronDown, Circle, CircleCheck, ExternalLink, Flag, Layers, Loader2, Sparkles } from "lucide-react";
-import { useState } from "react";
+import { Bookmark, ChevronDown, ExternalLink, Flag, Layers, Loader2, Sparkles } from "lucide-react";
+import { useState, useSyncExternalStore } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import type { ArticleListItem } from "@/lib/queries";
 import { cn, relativeTime } from "@/lib/utils";
 import { FeedIcon } from "@/components/feed-icon";
 import { Button } from "@/components/ui/button";
+import { BookmarkIcon, ReadIcon } from "./state-icons";
 import type { ListView } from "./view-switcher";
 
 type Props = {
@@ -30,6 +31,13 @@ export function ArticleList(props: Props) {
   return <ArticleRows {...props} />;
 }
 
+const subscribeNothing = () => () => {};
+
+/** Chegada em cascata (.list-in em globals.css): cada item espera um pouco mais; a partir do 12º, todos juntos. */
+function cascade(index: number) {
+  return { "--i": Math.min(index, 12) } as React.CSSProperties;
+}
+
 function Time({ date }: { date: Date }) {
   const locale = useLocale();
   return (
@@ -39,10 +47,24 @@ function Time({ date }: { date: Date }) {
   );
 }
 
-/** Marcador de "não lido" com rótulo acessível. */
-function UnreadDot({ className }: { className?: string }) {
+/**
+ * Marcador de "não lido" com rótulo acessível. Ao marcar como lido, encolhe e some em vez de sumir
+ * de uma vez; com `collapse`, também devolve o espaço (cancela o gap-1.5 da linha).
+ */
+function UnreadDot({ read = false, collapse = false, className }: { read?: boolean; collapse?: boolean; className?: string }) {
   const t = useTranslations("articles");
-  return <span aria-label={t("unread")} className={cn("size-1.5 shrink-0 rounded-full bg-primary", className)} />;
+  return (
+    <span
+      aria-label={read ? undefined : t("unread")}
+      aria-hidden={read || undefined}
+      className={cn(
+        "size-1.5 shrink-0 rounded-full bg-primary transition-[scale,opacity,width,margin] duration-300 ease-[var(--motion-out)]",
+        read && "scale-0 opacity-0",
+        read && collapse && "-mr-1.5 w-0",
+        className,
+      )}
+    />
+  );
 }
 
 function SavedIcon({ className }: { className?: string }) {
@@ -75,7 +97,7 @@ function RelatedSources({ item, onOpen, className }: { item: ArticleListItem; on
         <ChevronDown className={cn("size-3 transition-transform duration-200", open && "rotate-180")} />
       </button>
       {open && (
-        <ul className="mt-2 flex flex-col gap-1 border-l border-border pl-3">
+        <ul className="mt-2 flex animate-[ai-fade-in_220ms_var(--motion-out)] flex-col gap-1 border-l border-border pl-3">
           {item.related.map((r) => (
             <li key={r.id}>
               <button type="button" onClick={() => onOpen(r.id)} className="flex w-full min-w-0 cursor-pointer items-baseline gap-1.5 text-left text-xs hover:underline">
@@ -121,6 +143,10 @@ function PriorityBadge({ item, threshold = 70 }: { item: ArticleListItem; thresh
 
 function PreviewImage({ item, className }: { item: ArticleListItem; className: string }) {
   const [failed, setFailed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  // O fade (.img-fade começa invisível) só vale depois da hidratação: no HTML do servidor a imagem
+  // aparece assim que baixa, mesmo com o JavaScript atrasado ou com falha.
+  const hydrated = useSyncExternalStore(subscribeNothing, () => true, () => false);
   if (!item.imageUrl || failed) {
     return (
       <span className="absolute inset-0 flex items-center justify-center" aria-hidden>
@@ -136,11 +162,15 @@ function PreviewImage({ item, className }: { item: ArticleListItem; className: s
       loading="lazy"
       referrerPolicy="no-referrer"
       onError={() => setFailed(true)}
-      // O erro pode acontecer antes da hidratação (imagem já no HTML do servidor) e o onError não dispara.
+      onLoad={() => setLoaded(true)}
+      // O load/erro pode acontecer antes da hidratação (imagem já no HTML do servidor) e os eventos não disparam.
       ref={(img) => {
-        if (img?.complete && img.naturalWidth === 0) setFailed(true);
+        if (!img?.complete) return;
+        if (img.naturalWidth === 0) setFailed(true);
+        else setLoaded(true);
       }}
-      className={className}
+      data-loaded={loaded || undefined}
+      className={cn(hydrated && "img-fade", className)}
     />
   );
 }
@@ -177,7 +207,7 @@ function CardActions({
         aria-label={a.isSaved ? t("removeSaved") : t("save")}
         onClick={() => onToggleSaved(a.id, !a.isSaved)}
       >
-        <Bookmark className={cn(a.isSaved && "fill-current text-foreground")} />
+        <BookmarkIcon saved={a.isSaved} />
       </Button>
       <Button
         variant="ghost"
@@ -187,7 +217,7 @@ function CardActions({
         aria-label={a.isRead ? t("markUnread") : t("markRead")}
         onClick={() => onToggleRead(a.id, !a.isRead)}
       >
-        {a.isRead ? <CircleCheck /> : <Circle />}
+        <ReadIcon read={a.isRead} />
       </Button>
       {a.url && (
         <Button asChild variant="ghost" size="icon-sm" className="size-7" title={t("openOriginal")} aria-label={t("openOriginal")}>
@@ -201,8 +231,11 @@ function CardActions({
 }
 
 const cardSurface = cn(
-  "group relative overflow-hidden rounded-card border border-border bg-surface shadow-control transition-[border-color,box-shadow,opacity] duration-200",
-  "hover:border-ring/40 hover:shadow-card dark:hover:border-white/25",
+  "group relative overflow-hidden rounded-card border border-border bg-surface shadow-control transition-[border-color,box-shadow,opacity,scale,translate] duration-300 ease-[var(--motion-out)] has-[>button:active]:scale-[0.985] has-[>button:active]:duration-100",
+  // Hover: o card sobe um pouco e ganha sombra (no Dark, sem sombra, a borda acende). O hover vem do
+  // <li> (também .group), que não se move: com hover no próprio card, ele sairia de baixo do cursor
+  // na borda de baixo e ficaria tremendo.
+  "group-hover:-translate-y-1 group-hover:border-ring/40 group-hover:shadow-card dark:group-hover:border-white/25",
 );
 
 /* ── Cartões: horizontais, um por linha ───────────────────────────────── */
@@ -210,12 +243,12 @@ const cardSurface = cn(
 function ArticleCards({ items, loadingId, showFeed, onOpen, onToggleRead, onToggleSaved }: Props) {
   return (
     <ul className="mx-auto flex w-full max-w-5xl flex-col gap-3 p-4 sm:p-5">
-      {items.map((a) => {
+      {items.map((a, i) => {
         const pendingImage = !a.imageUrl && !a.imageChecked && Boolean(a.url);
         const hasMedia = Boolean(a.imageUrl) || pendingImage;
         return (
-          <li key={a.id} data-article-id={a.id}>
-            <article className={cn(cardSurface, a.isRead && "opacity-70 hover:opacity-100")}>
+          <li key={a.id} data-article-id={a.id} className="group list-in" style={cascade(i)}>
+            <article className={cn(cardSurface, a.isRead && "opacity-70 group-hover:opacity-100")}>
               <button
                 type="button"
                 onClick={() => onOpen(a.id)}
@@ -232,7 +265,7 @@ function ArticleCards({ items, loadingId, showFeed, onOpen, onToggleRead, onTogg
                       <PreviewImage
                         key={a.imageUrl}
                         item={a}
-                        className="absolute inset-0 size-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                        className="absolute inset-0 size-full object-cover group-hover:scale-[1.05]"
                       />
                     )}
                   </div>
@@ -240,7 +273,7 @@ function ArticleCards({ items, loadingId, showFeed, onOpen, onToggleRead, onTogg
 
                 <div className="flex min-w-0 flex-1 flex-col gap-2 p-4 sm:p-5">
                   <div className="flex min-w-0 items-center gap-1.5 pr-28 text-[0.6875rem] text-muted-foreground">
-                    {!a.isRead && <UnreadDot />}
+                    <UnreadDot read={a.isRead} collapse />
                     <FeedIcon src={a.feed.iconUrl} className="size-3.5" />
                     {showFeed && <span className="truncate font-medium text-foreground/80">{a.feed.title}</span>}
                     {showFeed && a.author && <span aria-hidden>·</span>}
@@ -285,11 +318,11 @@ function ArticleCards({ items, loadingId, showFeed, onOpen, onToggleRead, onTogg
 function ArticleGrid({ items, loadingId, showFeed, onOpen, onToggleRead, onToggleSaved }: Props) {
   return (
     <ul className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-3 p-4 sm:p-5">
-      {items.map((a) => {
+      {items.map((a, i) => {
         const pendingImage = !a.imageUrl && !a.imageChecked && Boolean(a.url);
         return (
-          <li key={a.id} data-article-id={a.id} className="min-w-0">
-            <article className={cn(cardSurface, "flex h-full flex-col", a.isRead && "opacity-70 hover:opacity-100")}>
+          <li key={a.id} data-article-id={a.id} className="group list-in min-w-0" style={cascade(i)}>
+            <article className={cn(cardSurface, "flex h-full flex-col", a.isRead && "opacity-70 group-hover:opacity-100")}>
               <button
                 type="button"
                 onClick={() => onOpen(a.id)}
@@ -300,7 +333,7 @@ function ArticleGrid({ items, loadingId, showFeed, onOpen, onToggleRead, onToggl
                     <PreviewImage
                       key={a.imageUrl}
                       item={a}
-                      className="absolute inset-0 size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                      className="absolute inset-0 size-full object-cover group-hover:scale-[1.06]"
                     />
                   ) : (
                     !pendingImage && (
@@ -313,7 +346,7 @@ function ArticleGrid({ items, loadingId, showFeed, onOpen, onToggleRead, onToggl
 
                 <div className="flex min-w-0 flex-1 flex-col gap-1.5 p-3">
                   <div className="flex min-w-0 items-center gap-1.5 text-[0.6875rem] text-muted-foreground">
-                    {!a.isRead && <UnreadDot />}
+                    <UnreadDot read={a.isRead} collapse />
                     <FeedIcon src={a.feed.iconUrl} className="size-3" />
                     <span className="truncate">{showFeed ? a.feed.title : (a.author ?? a.feed.title)}</span>
                     <span aria-hidden>·</span>
@@ -372,6 +405,7 @@ function ArticleTextList({ items, loadingId, showFeed, timezone, onOpen, onToggl
   const t = useTranslations("articles");
   const locale = useLocale();
   const dayLabels = { today: t("today"), yesterday: t("yesterday") };
+  const order = new Map(items.map((item, i) => [item.id, i]));
   const groups: { label: string; items: ArticleListItem[] }[] = [];
   for (const item of items) {
     const label = dayLabel(item.publishedAt, timezone, locale, dayLabels);
@@ -394,18 +428,14 @@ function ArticleTextList({ items, loadingId, showFeed, timezone, onOpen, onToggl
 
           <ul className="flex flex-col">
             {group.items.map((a) => (
-              <li key={a.id} data-article-id={a.id}>
+              <li key={a.id} data-article-id={a.id} className="list-in" style={cascade(order.get(a.id) ?? 0)}>
                 <article
                   className={cn(
                     "group relative flex items-start gap-3 rounded-input px-3 py-3 transition-colors duration-200 hover:bg-accent focus-within:bg-accent",
                     a.isRead && "opacity-75 hover:opacity-100",
                   )}
                 >
-                  {a.isRead ? (
-                    <span aria-hidden className="mt-2 size-1.5 shrink-0 rounded-full bg-transparent" />
-                  ) : (
-                    <UnreadDot className="mt-2" />
-                  )}
+                  <UnreadDot read={a.isRead} className="mt-2" />
 
                   <button
                     type="button"
@@ -476,7 +506,7 @@ function ArticleRows({ items, view, selectedId, loadingId, showFeed, onOpen }: P
   const titlesOnly = view === "titles";
   return (
     <ul className="divide-y divide-border">
-      {items.map((a) => {
+      {items.map((a, i) => {
         const selected = a.id === selectedId;
         const meta = (
           <div className="flex min-w-0 items-center gap-1.5 text-[0.6875rem] text-muted-foreground">
@@ -494,7 +524,7 @@ function ArticleRows({ items, view, selectedId, loadingId, showFeed, onOpen }: P
         );
 
         return (
-          <li key={a.id} data-article-id={a.id} className={cn(selected && "bg-accent")}>
+          <li key={a.id} data-article-id={a.id} className={cn("list-in", selected && "bg-accent")} style={cascade(i)}>
             <button
               type="button"
               onClick={() => onOpen(a.id)}
@@ -505,7 +535,7 @@ function ArticleRows({ items, view, selectedId, loadingId, showFeed, onOpen }: P
                 titlesOnly ? "items-center gap-3 px-4 py-2" : "gap-3 px-4 py-3",
               )}
             >
-              <span aria-hidden className={cn("mt-1.5 size-1.5 shrink-0 rounded-full", a.isRead ? "bg-transparent" : "bg-primary", titlesOnly && "hidden")} />
+              <UnreadDot read={a.isRead} className={cn("mt-1.5", titlesOnly && "hidden")} />
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 {!titlesOnly && meta}
                 <p

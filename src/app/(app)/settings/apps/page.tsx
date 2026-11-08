@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
 import { AppsSettings } from "./apps-settings";
+import { APPS_SECTIONS, parseSection } from "../sections";
 
 /** Endereço público: BETTER_AUTH_URL, ou o host da requisição atrás de proxy. */
 async function publicOrigin() {
@@ -12,8 +13,9 @@ async function publicOrigin() {
   return `${proto}://${host}`;
 }
 
-export default async function AppsSettingsPage() {
+export default async function AppsSettingsPage({ searchParams }: PageProps<"/settings/apps">) {
   const user = await requireUser();
+  const { section } = await searchParams;
   const [tokens, origin] = await Promise.all([
     db.apiToken.findMany({
       where: { userId: user.id },
@@ -29,6 +31,7 @@ export default async function AppsSettingsPage() {
       greaderUrl={`${origin}/api/greader`}
       feverUrl={`${origin}/api/fever`}
       saveUrl={`${origin}/save`}
+      initialSection={parseSection(APPS_SECTIONS, section)}
     />
   );
 }

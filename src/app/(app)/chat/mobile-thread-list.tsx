@@ -24,8 +24,8 @@ export function MobileThreadList({ threads }: { threads: Thread[] }) {
         </Button>
       </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40 md:hidden" />
-        <Dialog.Content className="fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col border-r border-border bg-background shadow-card outline-none md:hidden">
+        <Dialog.Overlay className="motion-overlay fixed inset-0 z-40 bg-black/40 md:hidden" />
+        <Dialog.Content className="motion-sheet fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col border-r border-border bg-background shadow-card outline-none md:hidden">
           <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-3">
             <Dialog.Title className="text-sm font-semibold">{t("title")}</Dialog.Title>
             <Dialog.Close asChild>

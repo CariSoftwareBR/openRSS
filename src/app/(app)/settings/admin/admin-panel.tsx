@@ -1,6 +1,6 @@
 "use client";
 
-import { Mail, ShieldCheck, Trash2, User as UserIcon, UserPlus } from "lucide-react";
+import { Mail, Package, Server, ShieldCheck, Trash2, User as UserIcon, UserPlus, Users } from "lucide-react";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
@@ -8,6 +8,8 @@ import { createUserAction, deleteUserAction, sendTestEmailAction, setUserRoleAct
 import { Button } from "@/components/ui/button";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Card, Field, Input, Switch } from "@/components/ui/input";
+import { SegmentedTabs, segmentedPanelProps, useSectionParam, type SegmentedTab } from "@/components/ui/segmented-tabs";
+import type { AdminSection } from "../sections";
 
 type User = { id: string; name: string; email: string; role: string; createdAt: Date; subscriptions: number };
 
@@ -18,6 +20,8 @@ export function AdminPanel({
   stats,
   passwordLoginDisabled = false,
   smtpHost = null,
+  initialSection,
+  version,
 }: {
   currentUserId: string;
   /** Com OIDC_DISABLE_PASSWORD_LOGIN não há como criar contas com senha. */
@@ -27,8 +31,12 @@ export function AdminPanel({
   settings: { allowRegistration: boolean; refreshIntervalMinutes: number };
   users: User[];
   stats: { feeds: number; articles: number; failingFeeds: number; database: string };
+  initialSection?: AdminSection;
+  /** Versão instalada e verificação de atualização (VersionSection), na sub-aba Versão. */
+  version: React.ReactNode;
 }) {
   const t = useTranslations("admin");
+  const tUpdates = useTranslations("updates");
   const [settings, setSettings] = useState(initial);
   const [newUser, setNewUser] = useState({ name: "", email: "", password: "", role: "user" as "user" | "admin" });
   const [pending, start] = useTransition();
@@ -37,6 +45,17 @@ export function AdminPanel({
     { value: "user", label: t("roleUser"), icon: <UserIcon /> },
     { value: "admin", label: t("roleAdmin"), description: t("roleAdminHint"), icon: <ShieldCheck /> },
   ];
+
+  const sections: SegmentedTab<AdminSection>[] = [
+    { value: "users", label: t("users", { count: users.length }), icon: Users },
+    { value: "instance", label: t("instance"), icon: Server },
+    { value: "mail", label: t("mail.title"), icon: Mail },
+    { value: "version", label: tUpdates("versionTitle"), icon: Package },
+  ];
+  const [section, changeSection] = useSectionParam(
+    sections.map((s) => s.value),
+    initialSection,
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -54,151 +73,158 @@ export function AdminPanel({
         ))}
       </div>
 
-      <form
-        className="flex flex-col gap-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          start(async () => {
-            const res = await updateAppSettingsAction(settings);
-            if (res.ok) toast.success(t("saved"));
-            else toast.error(res.error);
-          });
-        }}
-      >
-        <h2 className="eyebrow">{t("instance")}</h2>
-        <Card className="grid gap-4 sm:grid-cols-2">
-          <label className="flex items-center justify-between gap-3 sm:col-span-2">
-            <span>
-              <span className="block font-medium">{t("openRegistration")}</span>
-              <span className="text-xs text-muted-foreground">{t("openRegistrationHint")}</span>
-            </span>
-            <Switch checked={settings.allowRegistration} onCheckedChange={(v) => setSettings({ ...settings, allowRegistration: v })} />
-          </label>
-          <Field label={t("refreshInterval")}>
-            <Input
-              type="number"
-              min={5}
-              max={1440}
-              value={settings.refreshIntervalMinutes}
-              onChange={(e) => setSettings({ ...settings, refreshIntervalMinutes: Number(e.target.value) })}
-            />
-          </Field>
-        </Card>
-        <div>
-          <Button type="submit" variant="primary" disabled={pending}>
-            {t("save")}
-          </Button>
-        </div>
-      </form>
+      <SegmentedTabs tabs={sections} value={section} onChange={changeSection} idPrefix="admin" label={t("sectionsLabel")} className="self-start" />
 
-      <section className="flex flex-col gap-3">
-        <h2 className="eyebrow">{t("users", { count: users.length })}</h2>
-        <Card className="divide-y divide-border p-0">
-          {users.map((u) => (
-            <div key={u.id} className="flex flex-wrap items-center gap-2 px-4 py-3">
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">{u.name}</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {u.email} · {t("feedCount", { count: u.subscriptions })}
-                </p>
+      <div {...segmentedPanelProps("admin", "users", section)}>
+        <section className="flex flex-col gap-3">
+          <Card className="divide-y divide-border p-0">
+            {users.map((u) => (
+              <div key={u.id} className="flex flex-wrap items-center gap-2 px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">{u.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {u.email} · {t("feedCount", { count: u.subscriptions })}
+                  </p>
+                </div>
+                <Combobox
+                  size="sm"
+                  className="w-36"
+                  aria-label={t("role")}
+                  value={u.role}
+                  disabled={u.id === currentUserId || pending}
+                  options={roleOptions}
+                  onValueChange={(role) =>
+                    start(async () => {
+                      const res = await setUserRoleAction(u.id, role as "user" | "admin");
+                      if (!res.ok) toast.error(res.error);
+                    })
+                  }
+                />
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t("deleteUser")}
+                  disabled={u.id === currentUserId || pending}
+                  onClick={() => {
+                    if (!window.confirm(t("deleteUserConfirm", { email: u.email }))) return;
+                    start(async () => {
+                      const res = await deleteUserAction(u.id);
+                      if (!res.ok) toast.error(res.error);
+                    });
+                  }}
+                >
+                  <Trash2 />
+                </Button>
               </div>
-              <Combobox
-                size="sm"
-                className="w-36"
-                aria-label={t("role")}
-                value={u.role}
-                disabled={u.id === currentUserId || pending}
-                options={roleOptions}
-                onValueChange={(role) =>
+            ))}
+          </Card>
+
+          {passwordLoginDisabled ? (
+            <Card className="text-xs text-muted-foreground">{t("passwordLoginDisabled")}</Card>
+          ) : (
+            <Card>
+              <form
+                className="grid gap-4 sm:grid-cols-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
                   start(async () => {
-                    const res = await setUserRoleAction(u.id, role as "user" | "admin");
-                    if (!res.ok) toast.error(res.error);
-                  })
-                }
-              />
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={t("deleteUser")}
-                disabled={u.id === currentUserId || pending}
-                onClick={() => {
-                  if (!window.confirm(t("deleteUserConfirm", { email: u.email }))) return;
-                  start(async () => {
-                    const res = await deleteUserAction(u.id);
-                    if (!res.ok) toast.error(res.error);
+                    const res = await createUserAction(newUser);
+                    if (res.ok) {
+                      toast.success(t("userCreated"));
+                      setNewUser({ name: "", email: "", password: "", role: "user" });
+                    } else toast.error(res.error);
                   });
                 }}
               >
-                <Trash2 />
-              </Button>
-            </div>
-          ))}
-        </Card>
-
-        {passwordLoginDisabled ? (
-          <Card className="text-xs text-muted-foreground">{t("passwordLoginDisabled")}</Card>
-        ) : (
-          <Card>
-            <form
-              className="grid gap-4 sm:grid-cols-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                start(async () => {
-                  const res = await createUserAction(newUser);
-                  if (res.ok) {
-                    toast.success(t("userCreated"));
-                    setNewUser({ name: "", email: "", password: "", role: "user" });
-                  } else toast.error(res.error);
-                });
-              }}
-            >
-              <Field label={t("name")}>
-                <Input value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} required />
-              </Field>
-              <Field label={t("email")}>
-                <Input type="email" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} required />
-              </Field>
-              <Field label={t("initialPassword")}>
-                <Input type="password" minLength={8} value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} required />
-              </Field>
-              <Field label={t("role")}>
-                <Combobox
-                  aria-label={t("role")}
-                  value={newUser.role}
-                  options={roleOptions}
-                  onValueChange={(role) => setNewUser({ ...newUser, role: role as "user" | "admin" })}
-                />
-              </Field>
-              <div className="sm:col-span-2">
-                <Button type="submit" disabled={pending}>
-                  <UserPlus /> {t("createUser")}
-                </Button>
-              </div>
-            </form>
-          </Card>
-        )}
-      </section>
-
-      <section className="flex flex-col gap-3">
-        <h2 className="eyebrow">{t("mail.title")}</h2>
-        <Card className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-xs text-muted-foreground">{smtpHost ? t("mail.configured", { host: smtpHost }) : t("mail.notConfigured")}</p>
-          {smtpHost && (
-            <Button
-              disabled={pending}
-              onClick={() =>
-                start(async () => {
-                  const res = await sendTestEmailAction();
-                  if (res.ok) toast.success(res.message);
-                  else toast.error(res.error);
-                })
-              }
-            >
-              <Mail /> {t("mail.sendTest")}
-            </Button>
+                <Field label={t("name")}>
+                  <Input value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} required />
+                </Field>
+                <Field label={t("email")}>
+                  <Input type="email" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} required />
+                </Field>
+                <Field label={t("initialPassword")}>
+                  <Input type="password" minLength={8} value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} required />
+                </Field>
+                <Field label={t("role")}>
+                  <Combobox
+                    aria-label={t("role")}
+                    value={newUser.role}
+                    options={roleOptions}
+                    onValueChange={(role) => setNewUser({ ...newUser, role: role as "user" | "admin" })}
+                  />
+                </Field>
+                <div className="sm:col-span-2">
+                  <Button type="submit" disabled={pending}>
+                    <UserPlus /> {t("createUser")}
+                  </Button>
+                </div>
+              </form>
+            </Card>
           )}
-        </Card>
-      </section>
+        </section>
+      </div>
+
+      <div {...segmentedPanelProps("admin", "instance", section)}>
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            start(async () => {
+              const res = await updateAppSettingsAction(settings);
+              if (res.ok) toast.success(t("saved"));
+              else toast.error(res.error);
+            });
+          }}
+        >
+          <Card className="grid gap-4 sm:grid-cols-2">
+            <label className="flex items-center justify-between gap-3 sm:col-span-2">
+              <span>
+                <span className="block font-medium">{t("openRegistration")}</span>
+                <span className="text-xs text-muted-foreground">{t("openRegistrationHint")}</span>
+              </span>
+              <Switch checked={settings.allowRegistration} onCheckedChange={(v) => setSettings({ ...settings, allowRegistration: v })} />
+            </label>
+            <Field label={t("refreshInterval")}>
+              <Input
+                type="number"
+                min={5}
+                max={1440}
+                value={settings.refreshIntervalMinutes}
+                onChange={(e) => setSettings({ ...settings, refreshIntervalMinutes: Number(e.target.value) })}
+              />
+            </Field>
+          </Card>
+          <div>
+            <Button type="submit" variant="primary" disabled={pending}>
+              {t("save")}
+            </Button>
+          </div>
+        </form>
+      </div>
+
+      <div {...segmentedPanelProps("admin", "mail", section)}>
+        <section className="flex flex-col gap-3">
+          <Card className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-muted-foreground">{smtpHost ? t("mail.configured", { host: smtpHost }) : t("mail.notConfigured")}</p>
+            {smtpHost && (
+              <Button
+                disabled={pending}
+                onClick={() =>
+                  start(async () => {
+                    const res = await sendTestEmailAction();
+                    if (res.ok) toast.success(res.message);
+                    else toast.error(res.error);
+                  })
+                }
+              >
+                <Mail /> {t("mail.sendTest")}
+              </Button>
+            )}
+          </Card>
+        </section>
+      </div>
+
+      <div {...segmentedPanelProps("admin", "version", section)}>{version}</div>
     </div>
   );
 }

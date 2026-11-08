@@ -4,9 +4,11 @@ import { db } from "@/lib/db";
 import { OIDC_PROVIDER_ID, publicOidcInfo } from "@/lib/oidc";
 import { GeneralForm } from "./general-form";
 import { normalizeListView } from "@/lib/list-view";
+import { GENERAL_SECTIONS, parseSection } from "./sections";
 
-export default async function GeneralSettingsPage() {
+export default async function GeneralSettingsPage({ searchParams }: PageProps<"/settings">) {
   const user = await requireUser();
+  const { section } = await searchParams;
   const settings = await getUserSettings(user.id);
   const oidc = publicOidcInfo();
   const linked = oidc ? (await db.account.count({ where: { userId: user.id, providerId: OIDC_PROVIDER_ID } })) > 0 : false;
@@ -22,6 +24,7 @@ export default async function GeneralSettingsPage() {
       markReadOnScroll={settings.markReadOnScroll}
       sso={oidc ? { name: oidc.name, linked } : null}
       timezones={Intl.supportedValuesOf("timeZone")}
+      initialSection={parseSection(GENERAL_SECTIONS, section)}
     />
   );
 }

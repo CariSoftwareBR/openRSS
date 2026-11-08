@@ -66,7 +66,6 @@ export function SemanticSearchSettings({
 
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="eyebrow">{t("title")}</h2>
       <Card className="flex flex-col gap-4">
         <p className="text-xs text-muted-foreground">{t("description")}</p>
         {providers.length === 0 ? (

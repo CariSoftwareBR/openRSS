@@ -19,8 +19,7 @@
   },
   "theme": {
     "light": "Tema: Light",
-    "dark": "Tema: Dark",
-    "system": "Tema: sistema"
+    "dark": "Tema: Dark"
   },
   "errors": {
     "title": "Não foi possível carregar esta página",
@@ -357,6 +356,10 @@
       "subscribedToast": "Assinado: {title}"
     },
     "manager": {
+      "sections": {
+        "label": "Seções de feeds",
+        "transfer": "Importar e exportar"
+      },
       "genericError": "Erro",
       "opmlDescription": "Importe assinaturas de outro leitor ou exporte as suas.",
       "savedExportTitle": "Artigos salvos",
@@ -366,7 +369,7 @@
       "importFailed": ", {count, plural, =1 {1 falhou} other {# falharam}}",
       "import": "Importar",
       "export": "Exportar",
-      "folders": "Pastas",
+      "folders": "Pastas ({count})",
       "newFolder": "Nova pasta",
       "create": "Criar",
       "renameFolder": "Renomear pasta",
@@ -499,6 +502,13 @@
       "reload": "Recarregar modelos"
     },
     "settings": {
+      "sections": {
+        "label": "Seções de IA",
+        "preferences": "Preferências",
+        "audio": "Áudio",
+        "system": "Padrão do sistema",
+        "search": "Busca semântica"
+      },
       "providers": "Provedores",
       "ttsProviders": "Texto para áudio",
       "addTts": "Adicionar TTS",
@@ -512,7 +522,6 @@
       "scopeGlobalTag": "global",
       "scopeUserTag": "pessoal",
       "systemDefaultTag": "padrão do sistema",
-      "systemDefaultSection": "Padrão do sistema",
       "systemDefaultProvider": "Provedor",
       "systemDefaultModelLabel": "Modelo",
       "setSystemDefault": "Liberar para todos os usuários",
@@ -526,7 +535,6 @@
       "edit": "Editar",
       "delete": "Excluir",
       "deleteConfirm": "Excluir o provedor \"{name}\"?",
-      "preferences": "Preferências",
       "prefsSaved": "Preferências salvas",
       "defaultProvider": "Provedor padrão",
       "automatic": "Automático",
@@ -652,6 +660,12 @@
       "invalidDays": "Informe um número inteiro entre 1 e 3650 dias."
     },
     "general": {
+      "sections": {
+        "label": "Seções gerais",
+        "account": "Conta",
+        "language": "Idioma e região",
+        "reading": "Leitura"
+      },
       "saved": "Configurações salvas",
       "name": "Nome",
       "email": "Email",
@@ -661,7 +675,7 @@
       "timezoneSearch": "Buscar cidade ou região…",
       "listView": "Visualização da lista",
       "theme": "Tema",
-      "themeOptions": "Light · Dark · sistema",
+      "themeOptions": "Light · Dark",
       "shortcuts": "Atalhos",
       "shortcutList": {
         "nextPrev": "próximo / anterior",
@@ -690,6 +704,7 @@
     }
   },
   "admin": {
+    "sectionsLabel": "Seções de administração",
     "roleUser": "Usuário",
     "roleAdmin": "Admin",
     "roleAdminHint": "Gerencia usuários e provedores globais",
@@ -892,6 +907,7 @@
     }
   },
   "apps": {
+    "sectionsLabel": "Seções de apps",
     "title": "Apps de leitura",
     "description": "Use o openRSS em apps nativos (NetNewsWire, Reeder, ReadYou, FluentReader, Unread…) pelas APIs Google Reader ou Fever. Crie uma senha de aplicativo para cada app: sua senha da conta nunca é usada.",
     "greaderUrl": "URL da API Google Reader",
@@ -984,7 +1000,6 @@
     }
   },
   "semantic": {
-    "title": "Busca semântica",
     "description": "Encontra artigos pelo assunto, mesmo sem as palavras exatas, na busca das listas e no chat. Usa um provedor global com API de embeddings (OpenAI, OpenRouter ou compatível, como o Ollama). Os artigos dos últimos 60 dias são indexados aos poucos, a cada minuto.",
     "noProviders": "Cadastre um provedor global OpenAI, OpenRouter ou compatível em “Provedores” para ativar.",
     "provider": "Provedor global",

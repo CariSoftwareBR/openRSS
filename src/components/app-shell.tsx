@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useMemo, useOptimistic, useRef, useState, useTransition } from "react";
+import { useMemo, useOptimistic, useRef, useState, useTransition, ViewTransition } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -55,9 +55,11 @@ import type { ListView } from "@/lib/list-view";
 import type { UpdateInfo } from "@/lib/updates";
 import { FeedIcon } from "@/components/feed-icon";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { NavIndicator, NavigationProgress, NavigationProvider, useNavigation } from "@/components/navigation";
 import { Button } from "@/components/ui/button";
 import { ResizeHandle } from "@/components/ui/resize-handle";
 import { useResizableWidth } from "@/hooks/use-resizable-width";
+import { useChangeCount } from "@/hooks/use-change-count";
 
 type User = { name: string; email: string; role: string };
 type SidebarSub = SidebarData["unfiled"][number];
@@ -99,41 +101,54 @@ export function AppShell({
 
   return (
     <SidebarCountsProvider sidebar={sidebar}>
-      <div className="flex h-dvh overflow-hidden">
-        <aside
-          style={{ "--sidebar-w": `${sidebarSize.width}px` } as React.CSSProperties}
-          className="relative hidden w-(--sidebar-w) shrink-0 border-r border-border bg-sidebar lg:flex"
-        >
-          <SidebarContent sidebar={sidebar} user={user} update={update} />
-          <ResizeHandle label={t("resizeSidebar")} dragging={sidebarSize.dragging} {...sidebarSize.handleProps} />
-        </aside>
+      <NavigationProvider>
+        <div className="flex h-dvh overflow-hidden">
+          <aside
+            style={{ "--sidebar-w": `${sidebarSize.width}px` } as React.CSSProperties}
+            className="relative hidden w-(--sidebar-w) shrink-0 border-r border-border bg-sidebar lg:flex"
+          >
+            <SidebarContent sidebar={sidebar} user={user} update={update} />
+            <ResizeHandle label={t("resizeSidebar")} dragging={sidebarSize.dragging} {...sidebarSize.handleProps} />
+          </aside>
 
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex h-12 items-center gap-2 border-b border-border px-3 lg:hidden">
-            <Dialog.Root open={mobileOpen} onOpenChange={setMobileOpen}>
-              <Dialog.Trigger asChild>
-                <Button variant="ghost" size="icon-sm" aria-label={t("openMenu")}>
-                  <Menu />
-                </Button>
-              </Dialog.Trigger>
-              <Dialog.Portal>
-                <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40 lg:hidden" />
-                <Dialog.Content className="fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] border-r border-border bg-sidebar shadow-card outline-none lg:hidden">
-                  <Dialog.Title className="sr-only">{t("mainMenu")}</Dialog.Title>
-                  <Dialog.Description className="sr-only">{t("mainMenuDescription")}</Dialog.Description>
-                  <SidebarContent sidebar={sidebar} user={user} update={update} onClose={() => setMobileOpen(false)} />
-                </Dialog.Content>
-              </Dialog.Portal>
-            </Dialog.Root>
-            <span className="flex items-center gap-1.5 font-semibold">
-              <Rss className="size-4 text-primary" /> openRSS
-            </span>
+          <div className="flex min-w-0 flex-1 flex-col">
+            <div className="flex h-12 items-center gap-2 border-b border-border px-3 lg:hidden">
+              <Dialog.Root open={mobileOpen} onOpenChange={setMobileOpen}>
+                <Dialog.Trigger asChild>
+                  <Button variant="ghost" size="icon-sm" aria-label={t("openMenu")}>
+                    <Menu />
+                  </Button>
+                </Dialog.Trigger>
+                <Dialog.Portal>
+                  <Dialog.Overlay className="motion-overlay fixed inset-0 z-40 bg-black/40 lg:hidden" />
+                  <Dialog.Content className="motion-sheet fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] border-r border-border bg-sidebar shadow-card outline-none lg:hidden">
+                    <Dialog.Title className="sr-only">{t("mainMenu")}</Dialog.Title>
+                    <Dialog.Description className="sr-only">{t("mainMenuDescription")}</Dialog.Description>
+                    <SidebarContent sidebar={sidebar} user={user} update={update} onClose={() => setMobileOpen(false)} />
+                  </Dialog.Content>
+                </Dialog.Portal>
+              </Dialog.Root>
+              <span className="flex items-center gap-1.5 font-semibold">
+                <Rss className="size-4 text-primary" /> openRSS
+              </span>
+              <ThemeToggle className="ml-auto" />
+            </div>
+            <main className="relative min-h-0 flex-1">
+              <NavigationProgress className="absolute inset-x-0 top-0 z-20" />
+              {/* Canto superior direito, alinhado às barras de h-12. Cabeçalhos que chegam à borda reservam lg:pr-14. */}
+              <ThemeToggle className="absolute top-2.5 right-4 z-10 hidden lg:inline-flex" />
+              <ListViewProvider initial={listView}>
+                {/* Troca de página pelo menu: a anterior some e a nova sobe de leve (.page-swap em globals.css).
+                    Só anima navegações do tipo "page" (links do menu, PAGE_TRANSITION): ações dentro da página,
+                    router.refresh() e trocas de URL por replaceState não animam nem remontam nada. */}
+                <ViewTransition update={{ [PAGE_TRANSITION]: "page-swap", default: "none" }} default="none">
+                  {children}
+                </ViewTransition>
+              </ListViewProvider>
+            </main>
           </div>
-          <main className="min-h-0 flex-1">
-            <ListViewProvider initial={listView}>{children}</ListViewProvider>
-          </main>
         </div>
-      </div>
+      </NavigationProvider>
     </SidebarCountsProvider>
   );
 }
@@ -165,7 +180,7 @@ function SidebarContent({
 }) {
   const t = useTranslations("shell");
   const router = useRouter();
-  const pathname = usePathname();
+  const { activePath, navigate } = useNavigation();
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [renamingFolderId, setRenamingFolderId] = useState<string | null>(null);
@@ -185,7 +200,8 @@ function SidebarContent({
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 6 } }),
   );
 
-  const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`));
+  // activePath já é a rota clicada, antes de a página chegar: o destaque responde na hora.
+  const isActive = (href: string) => (href === "/" ? activePath === "/" : activePath === href || activePath.startsWith(`${href}/`));
   const folderName = (id: string | null) => (id ? (data.folders.find((f) => f.id === id)?.name ?? t("folderFallback")) : t("unfiled"));
 
   function clearExpandTimer() {
@@ -252,14 +268,11 @@ function SidebarContent({
         <Link href="/" className="flex items-center gap-1.5 font-semibold tracking-tight">
           <Rss className="size-4 text-primary" /> openRSS
         </Link>
-        <div className="flex items-center">
-          <ThemeToggle />
-          {onClose && (
-            <Button variant="ghost" size="icon-sm" aria-label={t("closeMenu")} onClick={onClose}>
-              <X />
-            </Button>
-          )}
-        </div>
+        {onClose && (
+          <Button variant="ghost" size="icon-sm" aria-label={t("closeMenu")} onClick={onClose}>
+            <X />
+          </Button>
+        )}
       </div>
 
       <div className="px-3 pb-2">
@@ -273,7 +286,8 @@ function SidebarContent({
         />
       </div>
 
-      <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+      <nav className="relative min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+        <NavIndicator activePath={activePath} />
         <NavRow href="/" icon={<Sparkles className="size-4" />} label={t("nav.today")} active={isActive("/")} />
         <NavRow href="/all" icon={<Inbox className="size-4" />} label={t("nav.all")} count={data.totalUnread} active={isActive("/all")} />
         <NavRow href="/saved" icon={<Bookmark className="size-4" />} label={t("nav.saved")} count={data.savedCount} muted active={isActive("/saved")} />
@@ -334,10 +348,8 @@ function SidebarContent({
                 <DropZone key={folder.id} id={folderZoneId(folder.id)} disabled={dragging?.folderId === folder.id} className="flex flex-col">
                   {/* Cabeçalho da pasta: peso forte, ícone colorido e contador em pílula */}
                   <div
-                    className={cn(
-                      "relative flex h-8 items-center rounded-md pr-2 transition-colors duration-200 hover:bg-sidebar-active",
-                      active && "bg-sidebar-active dark:before:absolute dark:before:inset-y-1.5 dark:before:left-0 dark:before:w-0.5 dark:before:rounded-full dark:before:bg-primary",
-                    )}
+                    data-nav-active={active || undefined}
+                    className="relative flex h-8 items-center rounded-md pr-2 transition-colors duration-200 hover:bg-sidebar-active/60"
                   >
                     <button
                       type="button"
@@ -352,12 +364,12 @@ function SidebarContent({
                       <RenameFolderInput folder={folder} onClose={() => setRenamingFolderId(null)} />
                     ) : (
                       <>
-                        <Link href={`/folder/${folder.id}`} draggable={false} className="flex h-full min-w-0 flex-1 items-center gap-2 text-sm font-semibold text-foreground">
+                        <Link href={`/folder/${folder.id}`} onNavigate={() => navigate(`/folder/${folder.id}`)} transitionTypes={[PAGE_TRANSITION]} draggable={false} className="flex h-full min-w-0 flex-1 items-center gap-2 text-sm font-semibold text-foreground">
                           <Icon className="size-4 shrink-0 fill-primary/15 text-primary dark:fill-ai/15 dark:text-ai" />
                           <span className="min-w-0 flex-1 truncate">{folder.name}</span>
                           {folder.unread > 0 && (
                             <span className="rounded-full bg-primary/10 px-1.5 py-px font-mono text-[0.625rem] font-medium tabular-nums text-primary dark:bg-white/10 dark:text-foreground">
-                              {folder.unread > 999 ? "999+" : folder.unread}
+                              <Count value={folder.unread} />
                             </span>
                           )}
                         </Link>
@@ -374,18 +386,26 @@ function SidebarContent({
                     )}
                   </div>
 
-                  {/* Feeds da pasta: recuados e ligados por uma linha-guia */}
-                  {open && (
-                    <div className="mt-0.5 mb-1 ml-3 border-l border-border pl-2">
-                      {folder.subscriptions.length === 0 ? (
-                        <p className="px-2 py-1 text-[0.6875rem] text-muted-foreground">{t("emptyFolder")}</p>
-                      ) : (
-                        folder.subscriptions.map((s) => (
-                          <DraggableFeedRow key={s.id} sub={s} nested active={isActive(`/feed/${s.feedId}`)} suppressClick={suppressClick} />
-                        ))
-                      )}
+                  {/* Feeds da pasta: recuados e ligados por uma linha-guia. Abre e fecha animando a altura. */}
+                  <div
+                    inert={!open}
+                    className={cn(
+                      "grid transition-[grid-template-rows,opacity] duration-300 ease-[var(--motion-out)]",
+                      open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+                    )}
+                  >
+                    <div className="min-h-0 overflow-hidden">
+                      <div className="mt-0.5 mb-1 ml-3 border-l border-border pl-2">
+                        {folder.subscriptions.length === 0 ? (
+                          <p className="px-2 py-1 text-[0.6875rem] text-muted-foreground">{t("emptyFolder")}</p>
+                        ) : (
+                          folder.subscriptions.map((s) => (
+                            <DraggableFeedRow key={s.id} sub={s} nested active={isActive(`/feed/${s.feedId}`)} suppressClick={suppressClick} />
+                          ))
+                        )}
+                      </div>
                     </div>
-                  )}
+                  </div>
                 </DropZone>
               );
             })}
@@ -433,7 +453,7 @@ function SidebarContent({
           </a>
         </Button>
         <Button asChild variant="ghost" size="icon-sm" aria-label={t("settings")} title={t("settings")}>
-          <Link href="/settings">
+          <Link href="/settings" onNavigate={() => navigate("/settings")} transitionTypes={[PAGE_TRANSITION]}>
             <Settings />
           </Link>
         </Button>
@@ -651,6 +671,19 @@ function DraggableFeedRow({
   );
 }
 
+/** Tipo de transição dos links do menu; o <ViewTransition> do conteúdo só anima navegações deste tipo. */
+const PAGE_TRANSITION = "page";
+
+/** Contador de não lidos: quando o valor muda, o número novo entra de baixo. No primeiro render, fica parado. */
+function Count({ value }: { value: number }) {
+  const changes = useChangeCount(value);
+  return (
+    <span key={changes} className={cn("inline-block", changes > 0 && "animate-[count-tick_320ms_var(--motion-spring)]")}>
+      {value > 999 ? "999+" : value}
+    </span>
+  );
+}
+
 function NavRow({
   href,
   icon,
@@ -668,13 +701,18 @@ function NavRow({
   muted?: boolean;
   className?: string;
 }) {
+  const { navigate } = useNavigation();
   return (
     <Link
       href={href}
+      onNavigate={() => navigate(href)}
+      transitionTypes={[PAGE_TRANSITION]}
       draggable={false}
+      // O fundo do item ativo é o NavIndicator (desliza entre itens); aqui só o texto muda.
+      data-nav-active={active || undefined}
       className={cn(
-        "relative flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground transition-colors duration-200 hover:bg-sidebar-active hover:text-foreground",
-        active && "bg-sidebar-active font-medium text-foreground dark:before:absolute dark:before:inset-y-1.5 dark:before:left-0 dark:before:w-0.5 dark:before:rounded-full dark:before:bg-primary",
+        "relative flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-sm text-muted-foreground transition-[color,background-color,scale] duration-200 hover:bg-sidebar-active/60 hover:text-foreground active:scale-[0.97] active:duration-75",
+        active && "font-medium text-foreground hover:bg-transparent",
         className,
       )}
     >
@@ -682,7 +720,7 @@ function NavRow({
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {!!count && (
         <span className={cn("font-mono text-[0.6875rem] tabular-nums", muted ? "text-muted-foreground" : active ? "text-foreground" : "text-primary dark:text-foreground")}>
-          {count > 999 ? "999+" : count}
+          <Count value={count} />
         </span>
       )}
     </Link>

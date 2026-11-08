@@ -6,9 +6,12 @@ import { EMBEDDING_PROVIDER_TYPES, embeddingStatus } from "@/lib/ai/embeddings";
 import { SemanticSearchSettings } from "./semantic-search-settings";
 import { isMailConfigured } from "@/lib/mail";
 import { AiSettings, type ProviderRow, type TtsProviderRow } from "./ai-settings";
+import { AI_SECTIONS, parseSection } from "../sections";
 
-export default async function AiSettingsPage() {
+export default async function AiSettingsPage({ searchParams }: PageProps<"/settings/ai">) {
   const user = await requireUser();
+  const { section } = await searchParams;
+  const initialSection = parseSection(AI_SECTIONS, section);
   const [providers, ttsProviders, settings, appSettings] = await Promise.all([
     db.aiProvider.findMany({
       where: { OR: [{ userId: user.id }, { userId: null }] },
@@ -51,34 +54,35 @@ export default async function AiSettingsPage() {
   const status = isAdmin ? await embeddingStatus() : null;
 
   return (
-    <>
-      <AiSettings
-        providers={rows}
-        ttsProviders={ttsRows}
-        meta={PROVIDER_META}
-        isAdmin={user.role === "admin"}
-        systemDefaultModel={appSettings.defaultAiModel ?? ""}
-        settings={{
-          aiProviderId: settings.aiProviderId,
-          aiModel: settings.aiModel ?? "",
-          ttsProviderId: settings.ttsProviderId,
-          interests: settings.interests ?? "",
-          classifyEnabled: settings.classifyEnabled,
-          digestEnabled: settings.digestEnabled,
-          digestHour: settings.digestHour,
-          digestEmail: settings.digestEmail,
-        }}
-        mailConfigured={isMailConfigured()}
+    <AiSettings
+      providers={rows}
+      ttsProviders={ttsRows}
+      meta={PROVIDER_META}
+      isAdmin={user.role === "admin"}
+      systemDefaultModel={appSettings.defaultAiModel ?? ""}
+      settings={{
+        aiProviderId: settings.aiProviderId,
+        aiModel: settings.aiModel ?? "",
+        ttsProviderId: settings.ttsProviderId,
+        interests: settings.interests ?? "",
+        classifyEnabled: settings.classifyEnabled,
+        digestEnabled: settings.digestEnabled,
+        digestHour: settings.digestHour,
+        digestEmail: settings.digestEmail,
+      }}
+      mailConfigured={isMailConfigured()}
+      initialSection={initialSection}
+      semanticSearch={
+        isAdmin ? (
+          <SemanticSearchSettings
+            providers={providers
+              .filter((p) => p.userId === null && EMBEDDING_PROVIDER_TYPES.includes(p.type as (typeof EMBEDDING_PROVIDER_TYPES)[number]))
+              .map((p) => ({ id: p.id, name: p.name, type: p.type }))}
+            current={{ providerId: appSettings.embeddingProviderId, model: appSettings.embeddingModel ?? "" }}
+            status={status}
+          />
+          ) : undefined
+        }
       />
-      {isAdmin && (
-        <SemanticSearchSettings
-          providers={providers
-            .filter((p) => p.userId === null && EMBEDDING_PROVIDER_TYPES.includes(p.type as (typeof EMBEDDING_PROVIDER_TYPES)[number]))
-            .map((p) => ({ id: p.id, name: p.name, type: p.type }))}
-          current={{ providerId: appSettings.embeddingProviderId, model: appSettings.embeddingModel ?? "" }}
-          status={status}
-        />
-      )}
-    </>
   );
 }

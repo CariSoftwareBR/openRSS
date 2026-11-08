@@ -19,8 +19,7 @@
   },
   "theme": {
     "light": "Theme: Light",
-    "dark": "Theme: Dark",
-    "system": "Theme: system"
+    "dark": "Theme: Dark"
   },
   "errors": {
     "title": "This page could not be loaded",
@@ -357,6 +356,10 @@
       "subscribedToast": "Subscribed: {title}"
     },
     "manager": {
+      "sections": {
+        "label": "Feed sections",
+        "transfer": "Import and export"
+      },
       "genericError": "Error",
       "opmlDescription": "Import subscriptions from another reader or export yours.",
       "savedExportTitle": "Saved articles",
@@ -366,7 +369,7 @@
       "importFailed": ", {count, plural, =1 {1 failed} other {# failed}}",
       "import": "Import",
       "export": "Export",
-      "folders": "Folders",
+      "folders": "Folders ({count})",
       "newFolder": "New folder",
       "create": "Create",
       "renameFolder": "Rename folder",
@@ -499,6 +502,13 @@
       "reload": "Reload models"
     },
     "settings": {
+      "sections": {
+        "label": "AI sections",
+        "preferences": "Preferences",
+        "audio": "Audio",
+        "system": "System default",
+        "search": "Semantic search"
+      },
       "providers": "Providers",
       "ttsProviders": "Text to speech",
       "addTts": "Add TTS",
@@ -512,7 +522,6 @@
       "scopeGlobalTag": "global",
       "scopeUserTag": "personal",
       "systemDefaultTag": "system default",
-      "systemDefaultSection": "System default",
       "systemDefaultProvider": "Provider",
       "systemDefaultModelLabel": "Model",
       "setSystemDefault": "Enable for all users",
@@ -526,7 +535,6 @@
       "edit": "Edit",
       "delete": "Delete",
       "deleteConfirm": "Delete the provider \"{name}\"?",
-      "preferences": "Preferences",
       "prefsSaved": "Preferences saved",
       "defaultProvider": "Default provider",
       "automatic": "Automatic",
@@ -652,6 +660,12 @@
       "invalidDays": "Enter a whole number between 1 and 3650 days."
     },
     "general": {
+      "sections": {
+        "label": "General sections",
+        "account": "Account",
+        "language": "Language and region",
+        "reading": "Reading"
+      },
       "saved": "Settings saved",
       "name": "Name",
       "email": "Email",
@@ -661,7 +675,7 @@
       "timezoneSearch": "Search city or region…",
       "listView": "List view",
       "theme": "Theme",
-      "themeOptions": "Light · Dark · system",
+      "themeOptions": "Light · Dark",
       "shortcuts": "Shortcuts",
       "shortcutList": {
         "nextPrev": "next / previous",
@@ -690,6 +704,7 @@
     }
   },
   "admin": {
+    "sectionsLabel": "Admin sections",
     "roleUser": "User",
     "roleAdmin": "Admin",
     "roleAdminHint": "Manages users and global providers",
@@ -892,6 +907,7 @@
     }
   },
   "apps": {
+    "sectionsLabel": "App sections",
     "title": "Reading apps",
     "description": "Use openRSS in native apps (NetNewsWire, Reeder, ReadYou, FluentReader, Unread…) through the Google Reader or Fever APIs. Create an app password for each app: your account password is never used.",
     "greaderUrl": "Google Reader API URL",
@@ -984,7 +1000,6 @@
     }
   },
   "semantic": {
-    "title": "Semantic search",
     "description": "Finds articles by topic, even without the exact words, in list search and in chat. Uses a global provider with an embeddings API (OpenAI, OpenRouter or compatible, like Ollama). Articles from the last 60 days are indexed gradually, every minute.",
     "noProviders": "Add a global OpenAI, OpenRouter or compatible provider under “Providers” to enable it.",
     "provider": "Global provider",

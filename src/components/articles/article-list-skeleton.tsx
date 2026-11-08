@@ -17,8 +17,9 @@ export function ArticleListSkeleton() {
   return (
     <div role="status" aria-busy="true" data-view={view} className="flex h-full min-h-0 w-full flex-col">
       <span className="sr-only">{t("loading")}</span>
-      <div aria-hidden className="flex flex-col gap-2 border-b border-border px-4 py-3">
-        <div className="flex items-center gap-2">
+      <div aria-hidden className="flex flex-col gap-2 border-b border-border px-4 pt-2.5 pb-3">
+        {/* Mesmo recuo do cabeçalho real: o canto direito é do ThemeToggle do AppShell. */}
+        <div className="flex items-center gap-2 lg:pr-10">
           <div className="h-5 w-48 animate-pulse rounded-md bg-muted" />
           <div className="ml-auto flex gap-1.5">
             {[0, 1, 2].map((i) => (
