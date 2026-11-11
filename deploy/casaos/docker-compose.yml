@@ -68,7 +68,7 @@ x-casaos:
   version: "0.1.7"
   update_at: "2026-11-11"
   release_notes:
-    en_US: The new version notice now only appears once the update can actually be installed: openRSS waits until the new version's image is published, checking again every 15 minutes while it is being built.
+    en_US: The new version notice now only appears once the update can actually be installed. openRSS waits until the new version's image is published, checking again every 15 minutes while it is being built.
   website: https://github.com/CariSoftwareBR/openRSS
   repo: https://github.com/CariSoftwareBR/openRSS
   support: https://github.com/CariSoftwareBR/openRSS/issues

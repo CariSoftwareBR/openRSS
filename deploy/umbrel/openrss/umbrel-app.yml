@@ -37,7 +37,7 @@ description: >-
 
   After installing, open openRSS and create your account. The first account becomes the administrator.
 releaseNotes: >-
-  The new version notice now only appears once the update can actually be installed: openRSS waits until the new version's image is published, checking again every 15 minutes while it is being built.
+  The new version notice now only appears once the update can actually be installed. openRSS waits until the new version's image is published, checking again every 15 minutes while it is being built.
 developer: CariSoftware
 website: https://github.com/CariSoftwareBR/openRSS
 dependencies: []
