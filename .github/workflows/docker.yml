@@ -13,6 +13,13 @@ permissions:
   contents: read
   packages: write
 
+# Vários pushes seguidos na main disputavam a tag "latest": o build que terminava por último vencia,
+# mesmo sendo de um commit mais antigo. Um build por ref; na main o novo cancela o anterior
+# (tags de versão nunca são canceladas).
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
+
 jobs:
   # A imagem só é publicada se subir e responder no /api/health.
   smoke:
@@ -63,6 +70,9 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable={{is_default_branch}}
+            # A tag de versão também publica "latest", no mesmo push: quando o app vê "0.1.6" no
+            # ghcr.io (src/lib/updates.ts), o Watchtower já encontra a versão nova em "latest".
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
       - uses: docker/build-push-action@v7
         with:
           context: .

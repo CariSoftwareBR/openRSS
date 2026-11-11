@@ -5,8 +5,12 @@ import pkg from "../../package.json";
 export const APP_VERSION: string = pkg.version;
 
 const REPOSITORY = "CariSoftwareBR/openRSS";
+/** Imagem publicada pelo workflow Docker (ghcr.io), com uma tag por versão ("0.1.6"). */
+const IMAGE = "carisoftwarebr/openrss";
 const CHECK_INTERVAL_MS = 12 * 3600_000;
 const RETRY_AFTER_FAILURE_MS = 3600_000;
+/** Release publicada no GitHub, mas a imagem ainda está sendo construída: checa de novo logo. */
+const RETRY_WHILE_BUILDING_MS = 15 * 60_000;
 
 export type InstallMethod = "docker" | "umbrel" | "casaos" | "unraid" | "source";
 
@@ -53,24 +57,61 @@ export function isNewerVersion(candidate: string, current: string) {
   return false;
 }
 
-async function fetchLatestRelease(): Promise<Release | null> {
+/**
+ * A imagem da versão já está no ghcr.io? A release é criada no GitHub antes do workflow Docker
+ * terminar (~20 min, multi-arquitetura); até lá o Watchtower não acha nada novo para baixar.
+ * A tag da versão só aparece no registro depois que todas as plataformas foram enviadas.
+ */
+export async function imagePublished(tag: string): Promise<boolean> {
+  const version = tag.replace(/^v/i, "");
+  const tokenRes = await fetch(`https://ghcr.io/token?scope=repository:${IMAGE}:pull`, {
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!tokenRes.ok) throw new Error(`GHCR token ${tokenRes.status}`);
+  const { token } = (await tokenRes.json()) as { token?: string };
+  const res = await fetch(`https://ghcr.io/v2/${IMAGE}/manifests/${encodeURIComponent(version)}`, {
+    method: "HEAD",
+    headers: {
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      accept: [
+        "application/vnd.oci.image.index.v1+json",
+        "application/vnd.docker.distribution.manifest.list.v2+json",
+        "application/vnd.oci.image.manifest.v1+json",
+        "application/vnd.docker.distribution.manifest.v2+json",
+      ].join(", "),
+    },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (res.status === 404) return false;
+  if (!res.ok) throw new Error(`GHCR ${res.status}`);
+  return true;
+}
+
+/** `building`: a release existe, mas a imagem dela ainda não foi publicada. */
+async function fetchLatestRelease(): Promise<{ release: Release | null; building: boolean }> {
   const res = await fetch(`https://api.github.com/repos/${REPOSITORY}/releases/latest`, {
     headers: { accept: "application/vnd.github+json", "user-agent": `openRSS/${APP_VERSION}` },
     signal: AbortSignal.timeout(8000),
   });
   if (!res.ok) throw new Error(`GitHub ${res.status}`);
   const data = (await res.json()) as { tag_name?: string; body?: string; html_url?: string; published_at?: string; draft?: boolean; prerelease?: boolean };
-  if (!data.tag_name || data.draft || data.prerelease) return null;
-  return {
+  if (!data.tag_name || data.draft || data.prerelease) return { release: null, building: false };
+  const release = {
     tag: data.tag_name,
     notes: (data.body ?? "").slice(0, 20_000),
     url: data.html_url ?? `https://github.com/${REPOSITORY}/releases`,
     publishedAt: data.published_at ?? null,
   };
+  // Instalação a partir do código não depende da imagem; nas demais, só avisa quando dá para atualizar.
+  if (installMethod() !== "source" && isNewerVersion(release.tag, APP_VERSION) && !(await imagePublished(release.tag))) {
+    return { release: null, building: true };
+  }
+  return { release, building: false };
 }
 
 /**
- * Atualiza o cache em segundo plano (uma busca por vez; no máximo a cada 12 h, 1 h após falha).
+ * Atualiza o cache em segundo plano (uma busca por vez; no máximo a cada 12 h, 1 h após falha,
+ * 15 min enquanto a imagem da nova versão ainda está sendo publicada).
  * Resolve com `false` quando o GitHub não respondeu (o cache anterior continua valendo).
  */
 function refreshRelease(force = false): Promise<boolean> {
@@ -78,8 +119,11 @@ function refreshRelease(force = false): Promise<boolean> {
   if (state?.pending) return state.pending;
   if (!force && state && Date.now() - state.checkedAt < CHECK_INTERVAL_MS) return Promise.resolve(true);
   const pending = fetchLatestRelease()
-    .then((release) => {
-      globalForUpdates.openrssRelease = { checkedAt: Date.now(), release };
+    .then(({ release, building }) => {
+      globalForUpdates.openrssRelease = building
+        ? // Mantém o aviso anterior (se houver) e volta a olhar em 15 min, não em 12 h.
+          { checkedAt: Date.now() - CHECK_INTERVAL_MS + RETRY_WHILE_BUILDING_MS, release: state?.release ?? null }
+        : { checkedAt: Date.now(), release };
       return true;
     })
     .catch((err) => {
