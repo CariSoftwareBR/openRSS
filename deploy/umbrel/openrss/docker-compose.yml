@@ -8,7 +8,7 @@ services:
       PROXY_AUTH_WHITELIST: "/api/greader,/api/greader/*,/api/fever,/api/fever/*,/manifest.webmanifest,/sw.js,/icons/*"
 
   server:
-    image: ghcr.io/carisoftwarebr/openrss:0.1.5@sha256:65a9e3deaabaafe4f1bdfbe6d1996f0cd2869f35fd176be0be1c19f90ea857ef
+    image: ghcr.io/carisoftwarebr/openrss:0.1.6@sha256:04adba6b713dfe1a667a5ecb9c73c6fd4812477f99c45ba3be9c3305a5e0ea8a
     user: "1000:1000"
     restart: on-failure
     environment:

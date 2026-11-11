@@ -1,7 +1,7 @@
 name: openrss
 services:
   openrss:
-    image: ghcr.io/carisoftwarebr/openrss:0.1.5
+    image: ghcr.io/carisoftwarebr/openrss:0.1.6
     restart: unless-stopped
     network_mode: bridge
     environment:
@@ -65,10 +65,10 @@ x-casaos:
   architectures:
     - amd64
     - arm64
-  version: "0.1.5"
-  update_at: "2026-11-08"
+  version: "0.1.6"
+  update_at: "2026-11-11"
   release_notes:
-    en_US: Livelier interface. The sidebar responds instantly with a sliding highlight and a loading bar, dialogs, menus and the reader animate, lists arrive in a cascade, and the theme toggle sits in the top-right corner. Settings are now organized into horizontal sub-tabs.
+    en_US: New front page in the style of a news portal, with a top story, highlights, a photo strip and a section per folder, ranked by how many feeds covered each story. The Today list moved to /today. Pasting a site's address now finds its feed far more often, including sites that block bots on their home page, YouTube channels, Reddit, GitHub, Medium, Substack and Mastodon.
   website: https://github.com/CariSoftwareBR/openRSS
   repo: https://github.com/CariSoftwareBR/openRSS
   support: https://github.com/CariSoftwareBR/openRSS/issues
