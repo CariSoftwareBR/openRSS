@@ -22,7 +22,8 @@ export default async function manifest(): Promise<MetadataRoute.Manifest> {
     // Menu "Compartilhar" do celular: manda o link para /save.
     share_target: { action: "/save", method: "GET", params: { title: "title", text: "text", url: "url" } },
     shortcuts: [
-      { name: t("today"), url: "/", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
+      { name: t("front"), url: "/", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
+      { name: t("today"), url: "/today", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
       { name: t("saved"), url: "/saved", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
       { name: t("digest"), url: "/digest", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
     ],

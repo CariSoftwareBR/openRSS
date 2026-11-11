@@ -18,6 +18,7 @@ import {
 } from "@dnd-kit/core";
 import {
   Bookmark,
+  LayoutPanelTop,
   Check,
   ChevronRight,
   Folder as FolderIcon,
@@ -288,7 +289,8 @@ function SidebarContent({
 
       <nav className="relative min-h-0 flex-1 overflow-y-auto px-2 pb-3">
         <NavIndicator activePath={activePath} />
-        <NavRow href="/" icon={<Sparkles className="size-4" />} label={t("nav.today")} active={isActive("/")} />
+        <NavRow href="/" icon={<LayoutPanelTop className="size-4" />} label={t("nav.front")} active={isActive("/")} />
+        <NavRow href="/today" icon={<Sparkles className="size-4" />} label={t("nav.today")} active={isActive("/today")} />
         <NavRow href="/all" icon={<Inbox className="size-4" />} label={t("nav.all")} count={data.totalUnread} active={isActive("/all")} />
         <NavRow href="/saved" icon={<Bookmark className="size-4" />} label={t("nav.saved")} count={data.savedCount} muted active={isActive("/saved")} />
         <NavRow href="/digest" icon={<Newspaper className="size-4" />} label={t("nav.digest")} active={isActive("/digest")} />

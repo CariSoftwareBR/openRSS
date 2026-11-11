@@ -5,6 +5,7 @@
     "login": "Entrar",
     "register": "Criar conta",
     "setup": "Configuração inicial",
+    "front": "Capa",
     "today": "Hoje",
     "all": "Todos",
     "saved": "Salvos",
@@ -147,6 +148,7 @@
     "mainMenuDescription": "Navegação, feeds e opções da conta.",
     "addFeed": "Adicionar feed",
     "nav": {
+      "front": "Capa",
       "today": "Hoje",
       "all": "Todos",
       "saved": "Salvos",
@@ -1067,5 +1069,19 @@
     "checkNow": "Verificar agora",
     "upToDate": "Você está na versão mais recente.",
     "checkDisabled": "A verificação automática está desligada (OPENRSS_UPDATE_CHECK=false)."
+  },
+  "front": {
+    "title": "Capa",
+    "summary": "{articles, plural, =1 {1 notícia} other {# notícias}} de {sources, plural, =1 {1 fonte} other {# fontes}}",
+    "highlights": "Destaques",
+    "sources": "{count, plural, =1 {1 fonte} other {# fontes}}",
+    "coveredBy": "Publicada por {names}",
+    "alsoIn": "Também em",
+    "seeFolder": "Ver pasta",
+    "more": "Mais notícias",
+    "seeAll": "Ver todos",
+    "emptyTitle": "A capa aparece quando chegarem notícias",
+    "emptyBody": "Adicione feeds de notícias. Quando houver matérias novas, a capa monta a manchete com o assunto que mais veículos estão cobrindo.",
+    "emptyAction": "Adicionar feed"
   }
 }
