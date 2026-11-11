@@ -6,7 +6,7 @@ import { getLocale, getTranslations } from "next-intl/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/session";
-import { discoverFeeds } from "@/lib/feeds/discover";
+import { DiscoveryError, discoverFeeds } from "@/lib/feeds/discover";
 import { parseOpml } from "@/lib/feeds/opml";
 import { refreshFeed, refreshFeedsNow, subscribe } from "@/lib/feeds/refresh";
 import { processNewArticles } from "@/lib/feeds/pipeline";
@@ -42,6 +42,7 @@ export async function discoverAction(input: string): Promise<Result<{ feeds: { u
       feeds: found.map(({ url, title, siteUrl, itemCount }) => ({ url, title, siteUrl, itemCount, subscribed: subscribed.has(url) })),
     };
   } catch (err) {
+    if (err instanceof DiscoveryError) return { ok: false, error: (await errors())(err.key) };
     return fail(err);
   }
 }
