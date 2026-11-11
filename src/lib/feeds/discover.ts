@@ -136,8 +136,8 @@ class Discovery {
   }
 
   /** Testa em lotes e para no primeiro lote que achar feed (caminhos comuns costumam ser o mesmo feed). */
-  async probeUntilFound(urls: string[]): Promise<void> {
-    const pending = this.take(urls, MAX_CANDIDATES);
+  async probeUntilFound(urls: string[], maxBatches = Infinity): Promise<void> {
+    const pending = this.take(urls.slice(0, maxBatches * MAX_PARALLEL), MAX_CANDIDATES);
     for (let i = 0; i < pending.length && this.byUrl.size === 0; i += MAX_PARALLEL) {
       const batch = pending.slice(i, i + MAX_PARALLEL);
       const results = await Promise.all(batch.map((url) => this.probe(url)));
@@ -190,7 +190,10 @@ export async function discoverFeeds(input: string): Promise<DiscoveredFeed[]> {
     if (discovery.feeds.length > 0) return discovery.feeds;
   }
 
-  await discovery.probeUntilFound(commonPathCandidates(page?.url ?? url));
+  // Sem resposta HTTP (timeout, conexão recusada) o host provavelmente está fora: um lote só,
+  // para não deixar o usuário esperando todos os caminhos expirarem.
+  const answered = page !== null || (pageError instanceof FetchError && pageError.status !== undefined);
+  await discovery.probeUntilFound(commonPathCandidates(page?.url ?? url), answered ? Infinity : 1);
   if (discovery.feeds.length > 0) return discovery.feeds;
 
   if (pageError) throw toDiscoveryError(pageError);

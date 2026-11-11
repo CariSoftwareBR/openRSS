@@ -52,6 +52,21 @@ describe("extractFeedCandidates", () => {
     expect(pages).toEqual(["https://exemplo.com/siga-por-rss.html", "https://exemplo.com/assine"]);
   });
 
+  it("põe feeds do próprio site antes de links para outros sites", () => {
+    const html = `<html><body>
+      <a href="https://amigo.net/feed/">Blog do amigo</a>
+      <a href="/comments/feed/">Comentários</a>
+      <a href="https://blog.exemplo.com.br/rss.xml">Blog</a>
+      <a href="/feed/">Posts</a>
+    </body></html>`;
+    expect(extractFeedCandidates(html, "https://www.exemplo.com.br/").anchors).toEqual([
+      "https://blog.exemplo.com.br/rss.xml",
+      "https://www.exemplo.com.br/feed/",
+      "https://www.exemplo.com.br/comments/feed/",
+      "https://amigo.net/feed/",
+    ]);
+  });
+
   it("resolve hrefs relativos com <base> e descarta fragmentos", () => {
     const html = `<html><head><base href="https://cdn.exemplo.com/site/"></head><body><a href="feed.xml#topo">RSS</a></body></html>`;
     expect(extractFeedCandidates(html, "https://exemplo.com/").anchors).toEqual(["https://cdn.exemplo.com/site/feed.xml"]);
@@ -130,6 +145,11 @@ describe("platformFeedCandidates", () => {
     expect(platformFeedCandidates("https://www.globo.com/")).toEqual([]);
   });
 
+  it("não quebra com % malformado no caminho", () => {
+    expect(platformFeedCandidates("https://mastodon.social/%E0%A4%A")).toEqual([]);
+    expect(platformFeedCandidates("https://www.reddit.com/r/%E0%A4%A")).toEqual(["https://www.reddit.com/r/%25E0%25A4%25A/.rss"]);
+  });
+
   it("sites comuns não têm regra", () => {
     expect(platformFeedCandidates("https://tecnoblog.net/")).toEqual([]);
     expect(platformFeedCandidates("https://exemplo.com/blog/")).toEqual([]);
@@ -166,6 +186,7 @@ vi.mock("@/lib/feeds/net", async (importActual) => {
       for (let hop = 0; hop < 5; hop++) {
         requested.push(url);
         const res = responses.get(url);
+        if (new URL(url).hostname === "fora.com") throw new actual.FetchError("connectFailed", { reason: "timeout" });
         if (!res) throw new actual.FetchError("httpStatus", { status: 404 }, 404);
         if (res.location) {
           url = new URL(res.location, url).toString();
@@ -201,6 +222,14 @@ describe("discoverFeeds", () => {
     expect(error).toBeInstanceOf(DiscoveryError);
     expect((error as InstanceType<typeof DiscoveryError>).key).toBe("siteBlocked");
     expect((error as Error).message).not.toMatch(/HTTP 403/);
+  });
+
+  it("host sem resposta: testa só um lote de caminhos comuns", async () => {
+    const { discoverFeeds, DiscoveryError } = await import("@/lib/feeds/discover");
+    const error = await discoverFeeds("https://fora.com/").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(DiscoveryError);
+    expect((error as InstanceType<typeof DiscoveryError>).key).toBe("siteUnreachable");
+    expect(requested).toHaveLength(1 + 6);
   });
 
   it("Globo: converte para /rss/g1/ sem depender da página", async () => {

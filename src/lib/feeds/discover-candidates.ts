@@ -46,6 +46,13 @@ export type HtmlCandidates = {
   pages: string[];
 };
 
+/** Aproxima o "site" de um host pelos dois últimos rótulos (três em domínios como .com.br). */
+function siteKey(hostname: string): string {
+  const labels = hostname.toLowerCase().replace(/^www\./, "").split(".");
+  const take = labels.length > 2 && /^(com|net|org|gov|edu|co|ac)$/.test(labels[labels.length - 2]) ? 3 : 2;
+  return labels.slice(-take).join(".");
+}
+
 function resolve(href: string | null, base: string): string | null {
   if (!href) return null;
   const value = href.trim();
@@ -88,12 +95,13 @@ export function extractFeedCandidates(html: string, baseUrl: string): HtmlCandid
     else if (FEED_TEXT.test(text) && url !== baseUrl) pages.add(url);
   }
 
-  // Comentários do WordPress ("…/comments/feed/") ficam por último: raramente é o que se quer.
-  const commentsLast = (list: Set<string>) => {
-    const all = [...list];
-    return [...all.filter((u) => !/\/comments\/feed/i.test(u)), ...all.filter((u) => /\/comments\/feed/i.test(u))];
-  };
-  return { alternates: commentsLast(alternates), anchors: commentsLast(anchors), pages: [...pages].filter((u) => !anchors.has(u)) };
+  // Ordem: feeds do próprio site antes de links para outros sites (blogroll, parceiros);
+  // comentários do WordPress ("…/comments/feed/") por último: raramente é o que se quer.
+  const site = siteKey(new URL(baseUrl).hostname);
+  const rank = (u: string) => (siteKey(new URL(u).hostname) === site ? 0 : 2) + (/\/comments\/feed/i.test(u) ? 1 : 0);
+  const ordered = (list: Iterable<string>) =>
+    [...list].map((u, i) => ({ u, i, r: rank(u) })).sort((a, b) => a.r - b.r || a.i - b.i).map(({ u }) => u);
+  return { alternates: ordered(alternates), anchors: ordered(anchors), pages: ordered([...pages].filter((u) => !anchors.has(u))) };
 }
 
 /** Caminhos comuns relativos ao caminho atual e depois à origem, sem repetir. */
@@ -116,7 +124,16 @@ const YOUTUBE_FEED = "https://www.youtube.com/feeds/videos.xml";
 const encodeSegment = (value: string) => encodeURIComponent(value).replace(/%40/g, "@");
 
 function segments(url: URL): string[] {
-  return url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
+  return url.pathname
+    .split("/")
+    .filter(Boolean)
+    .map((part) => {
+      try {
+        return decodeURIComponent(part);
+      } catch {
+        return part;
+      }
+    });
 }
 
 /**
