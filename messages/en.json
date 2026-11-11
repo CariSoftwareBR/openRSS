@@ -5,6 +5,7 @@
     "login": "Sign in",
     "register": "Create account",
     "setup": "Initial setup",
+    "front": "Front page",
     "today": "Today",
     "all": "All",
     "saved": "Saved",
@@ -147,6 +148,7 @@
     "mainMenuDescription": "Navigation, feeds and account options.",
     "addFeed": "Add feed",
     "nav": {
+      "front": "Front page",
       "today": "Today",
       "all": "All",
       "saved": "Saved",
@@ -1070,5 +1072,19 @@
     "checkNow": "Check now",
     "upToDate": "You are on the latest version.",
     "checkDisabled": "Automatic checking is turned off (OPENRSS_UPDATE_CHECK=false)."
+  },
+  "front": {
+    "title": "Front page",
+    "summary": "{articles, plural, =1 {1 story} other {# stories}} from {sources, plural, =1 {1 source} other {# sources}}",
+    "highlights": "Highlights",
+    "sources": "{count, plural, =1 {1 source} other {# sources}}",
+    "coveredBy": "Published by {names}",
+    "alsoIn": "Also in",
+    "seeFolder": "Open folder",
+    "more": "More news",
+    "seeAll": "See all",
+    "emptyTitle": "Your front page fills in as news arrives",
+    "emptyBody": "Add news feeds. When new stories come in, the front page leads with the topic most outlets are covering.",
+    "emptyAction": "Add feed"
   }
 }

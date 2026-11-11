@@ -6,6 +6,6 @@ export async function generateMetadata() {
   return { title: t("today") };
 }
 
-export default function TodayPage({ searchParams }: PageProps<"/">) {
+export default function TodayPage({ searchParams }: PageProps<"/today">) {
   return <ArticleView scope={{ kind: "today" }} searchParams={searchParams} />;
 }

@@ -5,6 +5,7 @@
     "login": "Iniciar sesión",
     "register": "Crear cuenta",
     "setup": "Configuración inicial",
+    "front": "Portada",
     "today": "Hoy",
     "all": "Todos",
     "saved": "Guardados",
@@ -147,6 +148,7 @@
     "mainMenuDescription": "Navegación, feeds y opciones de la cuenta.",
     "addFeed": "Añadir feed",
     "nav": {
+      "front": "Portada",
       "today": "Hoy",
       "all": "Todos",
       "saved": "Guardados",
@@ -1070,5 +1072,19 @@
     "checkNow": "Comprobar ahora",
     "upToDate": "Estás en la versión más reciente.",
     "checkDisabled": "La comprobación automática está desactivada (OPENRSS_UPDATE_CHECK=false)."
+  },
+  "front": {
+    "title": "Portada",
+    "summary": "{articles, plural, =1 {1 noticia} other {# noticias}} de {sources, plural, =1 {1 fuente} other {# fuentes}}",
+    "highlights": "Destacadas",
+    "sources": "{count, plural, =1 {1 fuente} other {# fuentes}}",
+    "coveredBy": "Publicada por {names}",
+    "alsoIn": "También en",
+    "seeFolder": "Ver carpeta",
+    "more": "Más noticias",
+    "seeAll": "Ver todas",
+    "emptyTitle": "La portada se llena cuando llegan noticias",
+    "emptyBody": "Agrega feeds de noticias. Cuando haya artículos nuevos, la portada abre con el tema que más medios están cubriendo.",
+    "emptyAction": "Agregar feed"
   }
 }
