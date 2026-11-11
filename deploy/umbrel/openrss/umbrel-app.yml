@@ -4,7 +4,7 @@ storage:
   dataRoot: data
 category: social
 name: openRSS
-version: "0.1.5"
+version: "0.1.6"
 tagline: A quiet RSS reader with AI that works for you
 description: >-
   openRSS is a self-hosted RSS reader that turns hundreds of unread headlines into a short list worth your time.
@@ -37,7 +37,7 @@ description: >-
 
   After installing, open openRSS and create your account. The first account becomes the administrator.
 releaseNotes: >-
-  Livelier interface. The sidebar responds instantly with a sliding highlight and a loading bar, dialogs, menus and the reader animate, lists arrive in a cascade, and the theme toggle sits in the top-right corner. Settings are now organized into horizontal sub-tabs.
+  New front page in the style of a news portal, with a top story, highlights, a photo strip and a section per folder, ranked by how many feeds covered each story. The Today list moved to /today. Pasting a site's address now finds its feed far more often, including sites that block bots on their home page, YouTube channels, Reddit, GitHub, Medium, Substack and Mastodon.
 developer: CariSoftware
 website: https://github.com/CariSoftwareBR/openRSS
 dependencies: []
