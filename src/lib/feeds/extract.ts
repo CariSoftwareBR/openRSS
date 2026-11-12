@@ -18,8 +18,8 @@ export type ExtractedPage = {
 };
 
 /** Baixa a página e extrai o conteúdo principal (modo leitura) e os metadados. */
-export async function extractPage(url: string): Promise<ExtractedPage> {
-  const res = await safeFetch(url, { accept: "text/html,application/xhtml+xml" });
+export async function extractPage(url: string, opts: { allowPrivateNetwork?: boolean } = {}): Promise<ExtractedPage> {
+  const res = await safeFetch(url, { accept: "text/html,application/xhtml+xml", allowPrivateNetwork: opts.allowPrivateNetwork ?? false });
   const { document } = parseHTML(res.body);
   const pageTitle = document.querySelector("title")?.textContent?.trim() || null;
   const base = document.createElement("base");

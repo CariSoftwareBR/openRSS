@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { accessibleArticles } from "@/lib/article-state";
 import { stripHtml, truncate } from "@/lib/utils";
+import { privateFeedsAllowed } from "./net";
 import { extractPage } from "./extract";
 
 // Links avulsos salvos para ler depois ficam num feed virtual por usuário. Ele não tem
@@ -68,7 +69,7 @@ export async function saveLink(userId: string, rawUrl: string, feedTitle: string
     return { articleId: previous.id, existed: true };
   }
 
-  const page = await extractPage(url);
+  const page = await extractPage(url, { allowPrivateNetwork: privateFeedsAllowed() });
   const host = new URL(page.url).hostname.replace(/^www\./, "");
   const text = page.excerpt ?? (page.html ? truncate(stripHtml(page.html), 280) : null);
   const article = await db.article.create({

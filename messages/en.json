@@ -773,6 +773,7 @@
     "privateNetwork": "The destination points to an unauthorized private network.",
     "responseTooLarge": "The response exceeds the maximum allowed size.",
     "tooManyRedirects": "Too many redirects.",
+    "insecureRedirect": "Refused to follow a redirect from HTTPS to HTTP.",
     "httpStatus": "HTTP {status}",
     "connectFailed": "Connection failed: {reason}",
     "feedRefreshing": "This feed is already being refreshed.",

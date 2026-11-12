@@ -4,7 +4,7 @@ import { setArticleStates } from "@/lib/article-state";
 import { getAppSettings } from "@/lib/app-settings";
 import { withLock } from "@/lib/jobs/lock";
 import { LocalizedError, serializeError } from "@/lib/localized-error";
-import { FetchError, safeFetch } from "./net";
+import { FetchError, privateFeedsAllowed, safeFetch, sameSite } from "./net";
 import { parseFeed, type ParsedFeed } from "./parse";
 import { assignStories } from "./stories";
 import { INGEST_UNREAD_MAX_AGE_MS, SUBSCRIBE_UNREAD_MAX_AGE_MS } from "./unread-age";
@@ -71,19 +71,45 @@ export async function ingestItems(feedId: string, items: ParsedFeed["items"], re
 
 /** Guids deste feed já gravados, com a data de publicação gravada. */
 async function storedGuids(feedId: string, guids: string[]) {
-  const rows = await db.article.findMany({ where: { feedId, guid: { in: guids } }, select: { guid: true, publishedAt: true } });
-  return new Map(rows.map((r) => [r.guid, r.publishedAt]));
+  const rows = await db.article.findMany({
+    where: { feedId, guid: { in: guids } },
+    select: { guid: true, publishedAt: true, contentHash: true },
+  });
+  return new Map(rows.map((r) => [r.guid, { publishedAt: r.publishedAt, contentHash: r.contentHash }]));
 }
 
 /**
  * Itens já gravados: só corrige a data quando o XML traz uma real mais antiga que a gravada
  * (fallback "agora" ou <updated> bumpado); nunca adianta. Evita um UPDATE por item a cada refresh.
  */
-async function fixKnownDates(feedId: string, known: ParsedFeed["known"], stored: Map<string, Date>) {
+async function fixKnownDates(feedId: string, known: ParsedFeed["known"], stored: Map<string, { publishedAt: Date }>) {
   for (const item of known) {
     const current = stored.get(item.guid);
-    if (!item.hasPublishDate || !current || current <= item.publishedAt) continue;
+    if (!item.hasPublishDate || !current || current.publishedAt <= item.publishedAt) continue;
     await db.article.updateMany({ where: { feedId, guid: item.guid }, data: { publishedAt: item.publishedAt } });
+  }
+}
+
+/** Grava a impressão atual dos itens antigos que ainda não tinham uma, sem reescrever o HTML. */
+async function backfillContentHashes(feedId: string, rows: ParsedFeed["hashBackfill"]) {
+  for (const row of rows) {
+    await db.article.updateMany({
+      where: { feedId, guid: row.guid, contentHash: null },
+      data: { contentHash: row.contentHash },
+    });
+  }
+}
+
+/** Título, HTML, resumo e imagem de um item já gravado, quando o feed republicou o conteúdo. */
+async function updateChangedItems(feedId: string, items: ParsedFeed["changed"]) {
+  for (const item of items) {
+    const { hasPublishDate, guid, publishedAt, ...data } = item;
+    await db.article.updateMany({ where: { feedId, guid }, data });
+    if (!hasPublishDate) continue;
+    await db.article.updateMany({
+      where: { feedId, guid, publishedAt: { gt: publishedAt } },
+      data: { publishedAt },
+    });
   }
 }
 
@@ -133,6 +159,7 @@ async function refreshFeedUnlocked(feedId: string): Promise<RefreshResult> {
 
   try {
     const res = await safeFetch(feed.url, {
+      allowPrivateNetwork: privateFeedsAllowed(),
       headers: {
         ...(feed.etag ? { "if-none-match": feed.etag } : {}),
         ...(feed.lastModified ? { "if-modified-since": feed.lastModified } : {}),
@@ -142,7 +169,8 @@ async function refreshFeedUnlocked(feedId: string): Promise<RefreshResult> {
     const next = new Date(Date.now() + nextFetchDelayMinutes(refreshIntervalMinutes, res.headers.get("cache-control")) * 60_000);
     // 301/308: passa a buscar no endereço novo. Se outro feed já usa essa URL (ou outro refresh a
     // tomou ao mesmo tempo), o conflito de unicidade só mantém a URL antiga: não é falha do feed.
-    if (res.movedPermanently && res.url !== feed.url) {
+    // Só troca o endereço gravado quando o destino permanente continua no mesmo site.
+    if (res.movedPermanently && res.url !== feed.url && sameSite(feed.url, res.url)) {
       await db.feed.update({ where: { id: feedId }, data: { url: res.url } }).catch((error) => {
         if (!isUniqueConflict(error)) throw error;
       });
@@ -156,13 +184,15 @@ async function refreshFeedUnlocked(feedId: string): Promise<RefreshResult> {
       return { newArticleIds: [] };
     }
 
-    let stored = new Map<string, Date>();
+    let stored = new Map<string, { publishedAt: Date; contentHash: string | null }>();
     const cutoff = await retentionCutoff();
     const parsed = await parseFeed(res.body, res.url, {
       existing: async (guids) => (stored = await storedGuids(feedId, guids)),
       skipBefore: cutoff,
     });
     await fixKnownDates(feedId, parsed.known, stored);
+    await backfillContentHashes(feedId, parsed.hashBackfill);
+    await updateChangedItems(feedId, parsed.changed);
     const createdIds = await ingestItems(feedId, parsed.items, cutoff);
     await markStaleUnread(feedId);
     const newArticleIds = await freshCreatedIds(createdIds);
@@ -239,15 +269,12 @@ export async function subscribe(
   let feed = await db.feed.findUnique({ where: { url } });
   let parsed = opts.parsed;
   if (!feed && !parsed) {
-    const res = await safeFetch(url);
-    // Endereço antigo de um feed que mudou (301/308): usa o feed já cadastrado na URL nova em vez
-    // de criar um duplicado com os mesmos artigos.
-    if (res.movedPermanently) {
-      const moved = await db.feed.findUnique({ where: { url: res.url } });
-      if (moved) {
-        url = res.url;
-        feed = moved;
-      }
+    const res = await safeFetch(url, { allowPrivateNetwork: privateFeedsAllowed() });
+    // Endereço antigo de um feed que mudou (301/308) no mesmo site: grava a URL final, e reaproveita
+    // a linha que já estiver lá, em vez de duplicar os artigos.
+    if (res.movedPermanently && sameSite(url, res.url)) {
+      url = res.url;
+      feed = await db.feed.findUnique({ where: { url } });
     }
     if (!feed) parsed = await parseFeed(res.body, res.url);
   }

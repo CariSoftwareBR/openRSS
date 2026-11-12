@@ -773,6 +773,7 @@
     "privateNetwork": "El destino apunta a una red privada no autorizada.",
     "responseTooLarge": "La respuesta supera el tamaño máximo permitido.",
     "tooManyRedirects": "Demasiadas redirecciones.",
+    "insecureRedirect": "Redirección de HTTPS a HTTP rechazada.",
     "httpStatus": "HTTP {status}",
     "connectFailed": "Fallo de conexión: {reason}",
     "feedRefreshing": "Este feed ya se está actualizando.",

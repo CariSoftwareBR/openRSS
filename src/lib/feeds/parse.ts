@@ -55,6 +55,8 @@ export type ParsedArticle = {
   publishedAt: Date;
   /** false: o XML não tinha data; `publishedAt` é a hora da coleta. */
   hasPublishDate: boolean;
+  /** Impressão do título, link e HTML crus. Ausente em itens montados fora do parse. */
+  contentHash?: string | null;
 };
 
 /** Item que já está no banco: só guid e data (para corrigir uma data de fallback). */
@@ -67,71 +69,123 @@ export type ParsedFeed = {
   iconUrl: string | null;
   /** Itens novos, completos (HTML saneado, imagem, resumo). */
   items: ParsedArticle[];
+  /** Itens já gravados cujo conteúdo mudou. */
+  changed: ParsedArticle[];
+  /** Itens já gravados sem impressão: gravar o hash, sem reescrever o HTML. */
+  hashBackfill: { guid: string; contentHash: string }[];
   /** Itens já gravados (quando `existing` foi informado): não passam pelo saneamento. */
   known: KnownItem[];
 };
 
+/** O que já está no banco para um guid. */
+export type StoredHead = { publishedAt: Date; contentHash: string | null };
+
 type ParseOptions = {
   /**
-   * Retorna, dos guids informados, os que já existem no banco e a data gravada. Itens conhecidos
-   * pulam o saneamento do HTML, que é a parte cara do parse e se repetia a cada atualização.
+   * Retorna, dos guids informados, os que já existem no banco, a data gravada e a impressão do
+   * conteúdo. Itens conhecidos e inalterados pulam o saneamento do HTML.
    */
-  existing?: (guids: string[]) => Promise<Map<string, Date>>;
+  existing?: (guids: string[]) => Promise<Map<string, StoredHead>>;
   /** Itens publicados antes disto (fora da retenção) são descartados sem passar pelo saneamento. */
   skipBefore?: Date;
 };
 
+const MAX_PARSED_ITEMS = 200;
+
 export function looksLikeFeed(body: string): boolean {
-  const head = body.slice(0, 2000).trimStart();
+  const head = body.slice(0, 4000).trimStart();
   let i = 0;
 
   const skipWs = () => {
     while (i < head.length && /\s/.test(head[i])) i++;
   };
+  const startsWith = (token: string) => head.slice(i, i + token.length).toLowerCase() === token;
 
-  if (head.startsWith("<?xml", i)) {
-    const endDecl = head.indexOf("?>", i + 5);
-    if (endDecl === -1) return false;
-    i = endDecl + 2;
+  // Declaração XML, stylesheet, comentário e DOCTYPE vêm antes do elemento raiz.
+  for (;;) {
     skipWs();
+    if (startsWith("<?")) {
+      const end = head.indexOf("?>", i + 2);
+      if (end === -1) return false;
+      i = end + 2;
+      continue;
+    }
+    if (startsWith("<!--")) {
+      const end = head.indexOf("-->", i + 4);
+      if (end === -1) return false;
+      i = end + 3;
+      continue;
+    }
+    if (startsWith("<!doctype")) {
+      const end = skipDoctype(head, i);
+      if (end === -1) return false;
+      i = end;
+      continue;
+    }
+    break;
   }
 
-  while (head.startsWith("<!--", i)) {
-    const endComment = head.indexOf("-->", i + 4);
-    if (endComment === -1) return false;
-    i = endComment + 3;
-    skipWs();
-  }
+  return /^<(rss|feed|rdf:RDF)(\W|$)/i.test(head.slice(i));
+}
 
-  const rest = head.slice(i);
-  const m = /^<(rss|feed|rdf:RDF)(\W|$)/i.exec(rest);
-  return m !== null;
+/** Fim do DOCTYPE (depois do `>`), ou -1. Respeita aspas e o subconjunto interno `[...]`. */
+function skipDoctype(head: string, start: number): number {
+  let quote: string | null = null;
+  let bracket = 0;
+  for (let j = start + 9; j < head.length; j++) {
+    const ch = head[j];
+    if (quote) {
+      if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+    if (ch === "[") bracket++;
+    else if (ch === "]" && bracket > 0) bracket--;
+    else if (ch === ">" && bracket === 0) return j + 1;
+  }
+  return -1;
 }
 
 export async function parseFeed(xml: string, feedUrl: string, opts: ParseOptions = {}): Promise<ParsedFeed> {
   const feed = await parser.parseString(xml);
   const siteUrl = feed.link ? safeUrl(feed.link, feedUrl) : null;
 
-  // Fase 1 (barata): link, data e guid de cada item.
-  const all = feed.items.slice(0, 200).map((item) => {
+  // Fase 1 (barata): link, data e guid de cada item. A retenção filtra antes do teto, e o teto
+  // fica com os mais novos — um feed antigo-primeiro não esconde o item 201.
+  const all = feed.items.map((item) => {
     const rawLink = item.link ? safeUrl(item.link, siteUrl ?? feedUrl) : null;
     const link = rawLink ? (canonicalizeUrl(rawLink) ?? rawLink) : null;
     const rawHtml = item["content:encoded"] ?? item.content ?? item.summary ?? "";
     const { publishedAt, hasPublishDate } = resolvePublishedAt(item, link);
     const dateKey = hasPublishDate ? publishedAt.toISOString() : "";
+    const title = item.title ?? "";
     // Sem guid/id/link: o conteúdo entra no hash para itens sem título nem data não colidirem entre si.
-    const guid = itemGuid(item.guid ?? item.id, link, `${item.title ?? ""}|${dateKey}|${rawHtml || item.contentSnippet || ""}`);
-    return { item, link, rawHtml, publishedAt, hasPublishDate, guid };
+    const guid = itemGuid(item.guid ?? item.id, link, `${title}|${dateKey}|${rawHtml || item.contentSnippet || ""}`);
+    const contentHash = createHash("sha1").update(`${title}\0${link ?? ""}\0${rawHtml}`).digest("hex");
+    return { item, link, rawHtml, publishedAt, hasPublishDate, guid, contentHash };
   });
-  const heads = opts.skipBefore ? all.filter((h) => h.publishedAt >= opts.skipBefore!) : all;
+  const inWindow = opts.skipBefore ? all.filter((h) => h.publishedAt >= opts.skipBefore!) : all;
+  const heads = capNewest(inWindow, MAX_PARSED_ITEMS);
 
   const stored = opts.existing && heads.length ? await opts.existing([...new Set(heads.map((h) => h.guid))]) : null;
   const known: KnownItem[] = [];
   const items: ParsedArticle[] = [];
+  const changed: ParsedArticle[] = [];
+  const hashBackfill: { guid: string; contentHash: string }[] = [];
 
-  // Fase 2 (cara): saneamento e extração só dos itens novos.
-  for (const { item, link, rawHtml, publishedAt, hasPublishDate, guid } of heads) {
-    if (stored?.has(guid)) {
+  // Fase 2 (cara): saneamento só dos itens novos ou cujo conteúdo mudou.
+  for (const head of heads) {
+    const { item, link, rawHtml, publishedAt, hasPublishDate, guid, contentHash } = head;
+    const prev = stored?.get(guid);
+    if (prev && prev.contentHash === contentHash) {
+      known.push({ guid, publishedAt, hasPublishDate });
+      continue;
+    }
+    if (prev && prev.contentHash == null) {
+      hashBackfill.push({ guid, contentHash });
       known.push({ guid, publishedAt, hasPublishDate });
       continue;
     }
@@ -144,7 +198,7 @@ export async function parseFeed(xml: string, feedUrl: string, opts: ParseOptions
       (item.enclosure?.type?.startsWith("image/") ? item.enclosure.url : null) ??
       firstImage(contentHtml);
 
-    items.push({
+    const article: ParsedArticle = {
       guid,
       url: link,
       title: (item.title && stripHtml(item.title)) || truncate(text, 80) || "(sem título)",
@@ -154,7 +208,10 @@ export async function parseFeed(xml: string, feedUrl: string, opts: ParseOptions
       imageUrl: imageUrl ?? null,
       publishedAt,
       hasPublishDate,
-    });
+      contentHash,
+    };
+    if (prev) changed.push(article);
+    else items.push(article);
   }
 
   return {
@@ -163,8 +220,22 @@ export async function parseFeed(xml: string, feedUrl: string, opts: ParseOptions
     description: feed.description ?? null,
     iconUrl: (feed.image as { url?: string } | undefined)?.url ?? (siteUrl ? faviconFor(siteUrl) : null),
     items,
+    changed,
+    hashBackfill,
     known,
   };
+}
+
+/** Mantém a ordem do documento, mas no máximo os `limit` mais recentes. */
+function capNewest<T extends { guid: string; publishedAt: Date }>(items: T[], limit: number): T[] {
+  if (items.length <= limit) return items;
+  const keep = new Set(
+    [...items]
+      .sort((a, b) => +b.publishedAt - +a.publishedAt || (a.guid < b.guid ? -1 : a.guid > b.guid ? 1 : 0))
+      .slice(0, limit)
+      .map((item) => item.guid),
+  );
+  return items.filter((item) => keep.has(item.guid));
 }
 
 export function faviconFor(siteUrl: string): string | null {

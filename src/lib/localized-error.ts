@@ -7,6 +7,7 @@ export type ServerErrorKey =
   | "privateNetwork"
   | "responseTooLarge"
   | "tooManyRedirects"
+  | "insecureRedirect"
   | "httpStatus"
   | "connectFailed"
   | "feedRefreshing"

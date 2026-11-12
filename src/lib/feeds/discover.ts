@@ -2,7 +2,7 @@ import "server-only";
 import { staticTranslator } from "@/i18n/static";
 import { LocalizedError } from "@/lib/localized-error";
 import { commonPathCandidates, extractFeedCandidates, platformFeedCandidates, youtubeFeedFromHtml } from "./discover-candidates";
-import { FetchError, safeFetch, type SafeFetchResult } from "./net";
+import { FetchError, privateFeedsAllowed, safeFetch, type SafeFetchResult } from "./net";
 import { looksLikeFeed, parseFeed, type ParsedFeed } from "./parse";
 
 export type DiscoveredFeed = { url: string; title: string; siteUrl: string | null; itemCount: number; feed: ParsedFeed };
@@ -108,7 +108,7 @@ class Discovery {
 
   private async probe(url: string): Promise<Probe> {
     try {
-      const res = await safeFetch(url, { timeoutMs: PROBE_TIMEOUT_MS });
+      const res = await safeFetch(url, { timeoutMs: PROBE_TIMEOUT_MS, allowPrivateNetwork: privateFeedsAllowed() });
       this.tried.add(res.url);
       if (looksLikeFeed(res.body)) return { feed: await toDiscovered(res) };
       return { html: res.body, url: res.url };
@@ -166,7 +166,7 @@ export async function discoverFeeds(input: string): Promise<DiscoveredFeed[]> {
   let pageError: unknown = null;
   discovery.markTried(url);
   try {
-    page = await safeFetch(url);
+    page = await safeFetch(url, { allowPrivateNetwork: privateFeedsAllowed() });
   } catch (error) {
     if (isFatal(error)) throw error;
     pageError = error;
