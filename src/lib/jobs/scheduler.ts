@@ -2,6 +2,7 @@ import "server-only";
 import { Cron } from "croner";
 import { tuneDatabase } from "@/lib/db";
 import { applyRetention, refreshDueFeeds } from "@/lib/feeds/refresh";
+import { classifyPending } from "@/lib/ai/classify";
 import { indexPendingEmbeddings, processNewArticles } from "@/lib/feeds/pipeline";
 import { groupRecentStories } from "@/lib/feeds/stories";
 import { fillPendingPreviewImages } from "@/lib/feeds/preview-image";
@@ -34,17 +35,18 @@ export async function startScheduler() {
 
   globalForJobs.openrssJobs = [
     new Cron("* * * * *", { protect: true }, async () => {
-      await withLock("refresh", 10 * 60_000, async () => {
-        const created = await refreshDueFeeds();
-        if (created.length) {
-          console.log(`[jobs:refresh] ${created.length} artigos novos`);
-          await processNewArticles(created).catch(log("process"));
-        }
-        await indexPendingEmbeddings();
-      }).catch(log("refresh"));
+      // Refresh solta o lock antes da IA: classificação e embeddings não seguram a atualização dos feeds.
+      const created = await withLock("refresh", 10 * 60_000, () => refreshDueFeeds()).catch(log("refresh"));
+      if (!created) return;
+      if (created.length) console.log(`[jobs:refresh] ${created.length} artigos novos`);
+      await withLock("process-articles", 10 * 60_000, async () => {
+        if (created.length) await processNewArticles(created);
+        await classifyPending();
+      }).catch(log("process"));
+      await withLock("embeddings", 10 * 60_000, () => indexPendingEmbeddings()).catch(log("embeddings"));
     }),
-    // Capas (og:image) dos artigos recentes cujo feed não traz imagem: a listagem já abre com elas.
-    new Cron("30 */2 * * * *", { protect: true }, async () => {
+    // Capas (og:image) dos artigos recentes cujo feed não traz imagem, a cada duas horas.
+    new Cron("30 */2 * * *", { protect: true }, async () => {
       await withLock("preview-images", 5 * 60_000, () => fillPendingPreviewImages()).catch(log("preview-images"));
     }),
     new Cron("5 * * * *", { protect: true }, async () => {

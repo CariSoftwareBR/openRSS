@@ -54,9 +54,7 @@ async function generateDigestUnlocked(userId: string, now: Date) {
     return db.digest.create({ data: { userId, day, content: empty, articleIds: "[]", createdAt: now } });
   }
 
-  const selected = articles
-    .sort((a, b) => (b.states[0]?.priorityScore ?? 50) - (a.states[0]?.priorityScore ?? 50))
-    .slice(0, MAX_ARTICLES);
+  const selected = articles.sort(byPriority).slice(0, MAX_ARTICLES);
 
   const { model, modelId } = await resolveModel(userId);
   const { text } = await generateText({
@@ -78,6 +76,19 @@ ${languageInstruction(settings.language)}`,
   return db.digest.create({ data });
 }
 
+/** Sem nota fica atrás de qualquer nota real: um artigo não classificado não passa na frente de um 40. */
+function byPriority(
+  a: { states: { priorityScore: number | null }[] },
+  b: { states: { priorityScore: number | null }[] },
+) {
+  const as = a.states[0]?.priorityScore;
+  const bs = b.states[0]?.priorityScore;
+  if (as == null && bs == null) return 0;
+  if (as == null) return 1;
+  if (bs == null) return -1;
+  return bs - as;
+}
+
 export async function generateDigest(userId: string, now = new Date()) {
   const result = await withLock(`digest:${userId}`, 5 * 60_000, () => generateDigestUnlocked(userId, now));
   if (!result) throw new AiError("digestInProgress");
@@ -89,10 +100,15 @@ export async function runScheduledDigests(now = new Date()) {
   const users = await db.userSettings.findMany({ where: { digestEnabled: true } });
   for (const s of users) {
     if (!digestTimeReached(now, s.timezone, s.digestHour)) continue;
-    const exists = await db.digest.findFirst({ where: { userId: s.userId, day: dayInTimezone(now, s.timezone) } });
-    if (exists) continue;
     try {
-      const digest = await generateDigest(s.userId, now);
+      // A checagem de "já existe hoje" fica dentro do mesmo lock da geração manual.
+      const digest = await withLock(`digest:${s.userId}`, 5 * 60_000, async () => {
+        const day = dayInTimezone(now, s.timezone);
+        const exists = await db.digest.findFirst({ where: { userId: s.userId, day }, select: { id: true } });
+        if (exists) return null;
+        return generateDigestUnlocked(s.userId, now);
+      });
+      if (!digest) continue;
       if (s.digestEmail && isMailConfigured()) {
         const user = await db.user.findUnique({ where: { id: s.userId }, select: { email: true } });
         if (user) {
