@@ -15,7 +15,7 @@ describe("OIDC config", () => {
       clientSecret: undefined,
       name: "SSO",
       scopes: ["openid", "email", "profile"],
-      autoRegister: true,
+      autoRegister: false,
       passwordLoginDisabled: false,
     });
   });

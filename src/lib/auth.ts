@@ -89,6 +89,17 @@ export const auth = lazyObject(() => {
               return { data: { ...user, role: "user" } };
             }
 
+            // Um cadastro que falhou depois de reservar o e-mail não pode travar a instância nesse endereço.
+            if (settings.bootstrapAdminEmail) {
+              const owner = await db.user.findFirst({ where: { email: settings.bootstrapAdminEmail }, select: { id: true } });
+              if (!owner) {
+                await db.appSettings.updateMany({
+                  where: { id: "app", bootstrapAdminEmail: settings.bootstrapAdminEmail },
+                  data: { bootstrapAdminEmail: null },
+                });
+              }
+            }
+
             const claimed = await db.$executeRaw`
               UPDATE "app_settings"
               SET "bootstrapAdminEmail" = ${user.email}

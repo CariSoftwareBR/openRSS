@@ -30,7 +30,7 @@ export function readOidcConfig(env: Env = process.env): OidcConfig | null {
     clientSecret: env.OIDC_CLIENT_SECRET?.trim() || undefined,
     name: env.OIDC_PROVIDER_NAME?.trim() || "SSO",
     scopes: (env.OIDC_SCOPES?.trim() || "openid email profile").split(/[\s,]+/).filter(Boolean),
-    autoRegister: flag(env.OIDC_AUTO_REGISTER, true),
+    autoRegister: flag(env.OIDC_AUTO_REGISTER, false),
     passwordLoginDisabled: flag(env.OIDC_DISABLE_PASSWORD_LOGIN, false),
   };
 }

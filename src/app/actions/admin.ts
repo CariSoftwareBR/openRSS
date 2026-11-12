@@ -53,12 +53,27 @@ export async function createUserAction(input: z.input<typeof userSchema>) {
   const parsed = userSchema.safeParse(input);
   if (!parsed.success) return { ok: false as const, error: actionErrorMessage(t, parsed.error) };
   const { role, ...body } = parsed.data;
+  // Pelo adaptador, sem signUpEmail: aquele caminho cria sessão e o plugin de cookies
+  // gravaria essa sessão na resposta da action, no lugar da do admin.
+  let createdId: string | null = null;
   try {
-    // Chamada server-side (sem request): não é bloqueada pelo "cadastro fechado" e não cria sessão.
-    const res = await auth.api.signUpEmail({ body });
-    await db.user.update({ where: { id: res.user.id }, data: { role } });
+    const ctx = await auth.$context;
+    const email = body.email.toLowerCase();
+    if (await ctx.internalAdapter.findUserByEmail(email)) return { ok: false as const, error: t("createUserFailed") };
+    const created = await ctx.internalAdapter.createUser({ email, name: body.name, role }, { method: "admin" });
+    if (!created) return { ok: false as const, error: t("createUserFailed") };
+    createdId = created.id;
+    await ctx.internalAdapter.linkAccount({
+      userId: created.id,
+      providerId: "credential",
+      accountId: created.id,
+      password: await ctx.password.hash(body.password),
+    });
+    if (created.role !== role) await db.user.update({ where: { id: created.id }, data: { role } });
   } catch (err) {
-    return { ok: false as const, error: err instanceof Error ? err.message : t("createUserFailed") };
+    if (createdId) await db.user.delete({ where: { id: createdId } }).catch(() => {});
+    console.error("[admin] createUser", err);
+    return { ok: false as const, error: t("createUserFailed") };
   }
   revalidatePath("/settings/admin");
   return { ok: true as const };
