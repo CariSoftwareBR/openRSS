@@ -107,7 +107,7 @@ export function Reader({
   const widthConfig = READER_WIDTHS[readerWidth];
   const nextWidth = READER_WIDTH_ORDER[(READER_WIDTH_ORDER.indexOf(readerWidth) + 1) % READER_WIDTH_ORDER.length];
 
-  const isRead = article.state?.isRead ?? true;
+  const isRead = article.state?.isRead ?? false;
   const isSaved = article.state?.isSaved ?? false;
   const html = showFull && fullHtml ? fullHtml : article.contentHtml;
 

@@ -72,7 +72,7 @@ export function ArticleWorkspace({
   const listSize = useResizableWidth("openrss:list-width", { defaultWidth: 416, min: 280, max: 900, minContent: 420 });
   const openRequest = useRef(0);
   const mutationRequest = useRef(new Map<string, number>());
-  const mutationQueue = useRef(new Map<string, Promise<void>>());
+  const mutationQueue = useRef(new Map<string, Promise<unknown>>());
   const filteredItems = useRef(new Map<string, { item: ArticleListItem; index: number }>());
   const loadingMoreRef = useRef(false);
   /** Marcados como não lidos pelo usuário: a rolagem (lido ao rolar) não os marca de novo. */
@@ -144,12 +144,25 @@ export function ArticleWorkspace({
     setItems((list) => list.map((i) => (i.id === id ? { ...i, ...patch } : i)));
   }, []);
 
-  const persistInOrder = useCallback(async (key: string, operation: () => Promise<void>) => {
+  const markSiblingsRead = useCallback((ids: string[]) => {
+    if (ids.length === 0) return;
+    const drop = new Set(ids);
+    setItems((list) => {
+      const next = list.map((item) => ({
+        ...item,
+        isRead: drop.has(item.id) ? true : item.isRead,
+        related: item.related.map((source) => (drop.has(source.id) ? { ...source, isRead: true } : source)),
+      }));
+      return unreadOnly ? next.filter((item) => !drop.has(item.id)) : next;
+    });
+  }, [unreadOnly]);
+
+  const persistInOrder = useCallback(async <T,>(key: string, operation: () => Promise<T>): Promise<T> => {
     const previous = mutationQueue.current.get(key) ?? Promise.resolve();
     const current = previous.catch(() => {}).then(operation);
     mutationQueue.current.set(key, current);
     try {
-      await current;
+      return await current;
     } finally {
       if (mutationQueue.current.get(key) === current) mutationQueue.current.delete(key);
     }
@@ -160,20 +173,23 @@ export function ArticleWorkspace({
       const request = ++openRequest.current;
       setLoadingId(id);
       setOperationError(null);
-      window.history.replaceState(null, "", buildUrl({ a: id }));
       try {
-        const article = await openArticleAction(id);
-        if (article) {
+        const opened = await openArticleAction(id);
+        if (opened) {
+          const { article, siblingIds } = opened;
+          window.history.replaceState(null, "", buildUrl({ a: id }));
           patchItem(id, { isRead: true });
+          markSiblingsRead(siblingIds);
           if (!article.state?.isRead) refreshCounts();
         }
         if (request !== openRequest.current) return;
         setLoadingId(null);
-        if (!article) {
+        if (!opened) {
           setOperationError(t("errors.notFound"));
           toast.error(t("errors.notFound"));
           return;
         }
+        const { article } = opened;
         const state = { ...(article.state ?? emptyState(article)), isRead: true, readAt: article.state?.readAt ?? new Date() };
         setSelected({ ...article, state });
       } catch {
@@ -183,7 +199,7 @@ export function ArticleWorkspace({
         toast.error(t("errors.openFailed"));
       }
     },
-    [buildUrl, patchItem, refreshCounts, t],
+    [buildUrl, markSiblingsRead, patchItem, refreshCounts, t],
   );
 
   const close = useCallback(() => {
@@ -224,16 +240,19 @@ export function ArticleWorkspace({
             next.splice(Math.min(removed.index, next.length), 0, { ...removed.item, isRead: false });
             return next;
           });
-          filteredItems.current.delete(key);
         }
       } else patchItem(id, { isRead });
       if (selected?.id === id) setSelected((s) => (s ? { ...s, state: { ...(s.state ?? emptyState(s)), isRead } } : s));
       try {
-        await persistInOrder(key, () => setRead(id, isRead));
+        const { siblingIds } = await persistInOrder(key, () => setRead(id, isRead));
+        if (isRead) markSiblingsRead(siblingIds);
+        if (unreadOnly && !isRead) filteredItems.current.delete(key);
         refreshCounts();
       } catch {
         if (mutationRequest.current.get(key) !== request) return;
-        if (previousItem && unreadOnly && isRead) {
+        if (unreadOnly && !isRead && !previousItem) {
+          setItems((list) => list.filter((item) => item.id !== id));
+        } else if (previousItem && unreadOnly && isRead) {
           setItems((list) => {
             const without = list.filter((item) => item.id !== id);
             without.splice(Math.min(previousIndex, without.length), 0, previousItem);
@@ -247,7 +266,7 @@ export function ArticleWorkspace({
         toast.error(t("errors.readStateFailed"));
       }
     },
-    [items, patchItem, persistInOrder, refreshCounts, selected, t, unreadOnly],
+    [items, markSiblingsRead, patchItem, persistInOrder, refreshCounts, selected, t, unreadOnly],
   );
 
   const toggleSaved = useCallback(
@@ -270,17 +289,19 @@ export function ArticleWorkspace({
             next.splice(Math.min(removed.index, next.length), 0, { ...removed.item, isSaved: true });
             return next;
           });
-          filteredItems.current.delete(key);
         }
       } else patchItem(id, { isSaved });
       if (selected?.id === id) setSelected((s) => (s ? { ...s, state: { ...(s.state ?? emptyState(s)), isSaved } } : s));
       try {
         await persistInOrder(key, () => setSaved(id, isSaved));
+        if (scope.kind === "saved" && isSaved) filteredItems.current.delete(key);
         refreshCounts();
         toast.success(isSaved ? t("saved") : t("unsaved"));
       } catch {
         if (mutationRequest.current.get(key) !== request) return;
-        if (previousItem && scope.kind === "saved" && !isSaved) {
+        if (scope.kind === "saved" && isSaved && !previousItem) {
+          setItems((list) => list.filter((item) => item.id !== id));
+        } else if (previousItem && scope.kind === "saved" && !isSaved) {
           setItems((list) => {
             const without = list.filter((item) => item.id !== id);
             without.splice(Math.min(previousIndex, without.length), 0, previousItem);
@@ -400,13 +421,16 @@ export function ArticleWorkspace({
     pendingScrollReads.current.clear();
     if (ids.length === 0) return;
     void markReadMany(ids)
-      .then(() => refreshCounts())
+      .then(({ siblingIds }) => {
+        markSiblingsRead(siblingIds);
+        refreshCounts();
+      })
       .catch(() => {
         // Falhou: volta a mostrar como não lidos.
         const failed = new Set(ids);
         setItems((list) => list.map((i) => (failed.has(i.id) ? { ...i, isRead: false } : i)));
       });
-  }, [refreshCounts]);
+  }, [markSiblingsRead, refreshCounts]);
   useEffect(() => () => {
     if (scrollReadTimer.current) clearTimeout(scrollReadTimer.current);
     flushScrollReads();
@@ -482,7 +506,7 @@ export function ArticleWorkspace({
           if (selected?.url) window.open(selected.url, "_blank", "noopener");
           break;
         case "m":
-          if (selected) void toggleRead(selected.id, !(selected.state?.isRead ?? true));
+          if (selected) void toggleRead(selected.id, !(selected.state?.isRead ?? false));
           break;
         case "s":
           if (selected) void toggleSaved(selected.id, !selected.state?.isSaved);
@@ -635,7 +659,7 @@ export function ArticleWorkspace({
             onClose={close}
             onPrev={selectedIndex > 0 ? () => move(-1) : undefined}
             onNext={selectedIndex !== -1 && selectedIndex < items.length - 1 ? () => move(1) : undefined}
-            onToggleRead={() => toggleRead(selected.id, !(selected.state?.isRead ?? true))}
+            onToggleRead={() => toggleRead(selected.id, !(selected.state?.isRead ?? false))}
             onToggleSaved={() => toggleSaved(selected.id, !selected.state?.isSaved)}
           />
         </div>

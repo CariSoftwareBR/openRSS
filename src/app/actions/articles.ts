@@ -13,15 +13,16 @@ export async function openArticleAction(articleId: string) {
   const user = await requireUser();
   const article = await getArticle(user.id, articleId);
   if (!article) return null;
+  let siblingIds: string[] = [];
   if (!article.state?.isRead) {
     await db.userArticle.upsert({
       where: { userId_articleId: { userId: user.id, articleId } },
       create: { userId: user.id, articleId, isRead: true, readAt: new Date() },
       update: { isRead: true, readAt: new Date() },
     });
-    await markStorySiblingsRead(user.id, articleId);
+    siblingIds = await markStorySiblingsRead(user.id, articleId);
   }
-  return article;
+  return { article, siblingIds };
 }
 
 async function assertAccess(userId: string, articleId: string) {
@@ -42,9 +43,10 @@ export async function setRead(articleId: string, isRead: boolean) {
     create: { userId: user.id, articleId, isRead, readAt: isRead ? new Date() : null },
     update: { isRead, readAt: isRead ? new Date() : null },
   });
-  if (isRead) await markStorySiblingsRead(user.id, articleId);
+  const siblingIds = isRead ? await markStorySiblingsRead(user.id, articleId) : [];
   // Sem revalidatePath: a lista já está atualizada no cliente e a barra lateral busca só os
   // contadores (/api/sidebar/counts). Revalidar remontava a página inteira a cada clique.
+  return { siblingIds };
 }
 
 /** Marca vários como lidos de uma vez (rolagem da lista). Ignora ids sem acesso. */
@@ -55,7 +57,8 @@ export async function markReadMany(articleIds: string[]) {
   // Como em setRead: as outras fontes do mesmo fato (escondidas pelo agrupamento) também. Só dos
   // ids que o usuário pode ver (setArticleStates já ignora os demais).
   const allowed = await db.article.findMany({ where: { id: { in: ids }, ...accessibleArticles(user.id) }, select: { id: true } });
-  await markStorySiblingsReadMany(user.id, allowed.map((a) => a.id));
+  const siblingIds = await markStorySiblingsReadMany(user.id, allowed.map((a) => a.id));
+  return { siblingIds };
 }
 
 export async function setSaved(articleId: string, isSaved: boolean) {
@@ -84,28 +87,7 @@ export async function markAllRead(scope: ArticleScope) {
   });
   const ids = rows.map((row) => row.id);
   if (ids.length > 0) {
-    const now = new Date();
-    for (let i = 0; i < ids.length; i += 500) {
-      const chunk = ids.slice(i, i + 500);
-      await db.$transaction(async (tx) => {
-        // Atualiza os estados existentes de uma vez e cria só os que faltam (em vez de um upsert por artigo).
-        await tx.userArticle.updateMany({
-          where: { userId: user.id, articleId: { in: chunk } },
-          data: { isRead: true, readAt: now },
-        });
-        const existing = await tx.userArticle.findMany({
-          where: { userId: user.id, articleId: { in: chunk } },
-          select: { articleId: true },
-        });
-        const known = new Set(existing.map((row) => row.articleId));
-        const missing = chunk.filter((articleId) => !known.has(articleId));
-        if (missing.length > 0) {
-          await tx.userArticle.createMany({
-            data: missing.map((articleId) => ({ userId: user.id, articleId, isRead: true, readAt: now })),
-          });
-        }
-      });
-    }
+    await setArticleStates(user.id, ids, { isRead: true });
     // Ação rara: invalida também o cache do roteador (o "Voltar" não mostra o estado antigo).
     revalidatePath("/", "layout");
   }

@@ -16,7 +16,7 @@ export function StandaloneReader({ article: initial, aiEnabled, ttsEnabled }: { 
   const state = article.state ?? {
     userId: "",
     articleId: article.id,
-    isRead: true,
+    isRead: false,
     isSaved: false,
     readAt: null,
     savedAt: null,
