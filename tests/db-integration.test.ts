@@ -433,6 +433,7 @@ describe("subscribe backlog", () => {
     imageUrl: null,
     publishedAt,
     hasPublishDate,
+    contentHash: null,
   });
 
   it("marks historical and undated items read, keeps yesterday unread", async () => {
@@ -443,6 +444,8 @@ describe("subscribe backlog", () => {
         description: null,
         iconUrl: null,
         known: [],
+        changed: [],
+        hashBackfill: [],
         items: [
           parsedItem("old", new Date(Date.now() - 14 * 86400000)),
           parsedItem("fresh", new Date(Date.now() - 3600_000)),

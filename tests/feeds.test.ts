@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { looksLikeFeed, parseFeed } from "@/lib/feeds/parse";
+import { decodeFeedBody, sameSite } from "@/lib/feeds/net";
 import { buildOpml, parseOpml } from "@/lib/feeds/opml";
 import { parseSrcset, sanitizeArticleHtml } from "@/lib/feeds/sanitize";
 
@@ -32,6 +33,12 @@ describe("parseFeed", () => {
     expect(looksLikeFeed(rss)).toBe(true);
     expect(looksLikeFeed(atom)).toBe(true);
     expect(looksLikeFeed("<!doctype html><html></html>")).toBe(false);
+    expect(
+      looksLikeFeed(`<?xml version="1.0"?>
+<!DOCTYPE rss PUBLIC "-//Netscape Communications//DTD RSS 0.91//EN" "http://my.netscape.com/publish/formats/rss-0.91.dtd">
+<rss version="0.91"><channel></channel></rss>`),
+    ).toBe(true);
+    expect(looksLikeFeed(`<?xml version="1.0"?>\n<?xml-stylesheet type="text/xsl" href="style.xsl"?>\n<rss version="2.0"><channel></channel></rss>`)).toBe(true);
   });
 
   it("normaliza itens RSS com URLs absolutas e HTML sanitizado", async () => {
@@ -56,7 +63,7 @@ describe("parseFeed", () => {
     const feed = await parseFeed(rss, "https://exemplo.com/feed.xml", {
       existing: async (guids) => {
         asked.push(guids);
-        return new Map([["post-1", new Date("2026-09-15T00:00:00Z")]]);
+        return new Map([["post-1", { publishedAt: new Date("2026-09-15T00:00:00Z"), contentHash: null }]]);
       },
     });
     expect(asked).toEqual([["post-1", "https://exemplo.com/posts/2"]]);
@@ -110,6 +117,38 @@ describe("parseFeed", () => {
     </channel></rss>`;
     const feed = await parseFeed(xml, "https://nodate.test/feed");
     expect(feed.items[0].hasPublishDate).toBe(false);
+  });
+
+  it("filtra pela retenção antes do teto de 200 itens", async () => {
+    const old = Array.from({ length: 200 }, (_, i) => `<item><title>old ${i}</title><guid>old-${i}</guid><pubDate>Mon, 01 Jan 2024 00:00:00 GMT</pubDate></item>`).join("");
+    const xml = `<?xml version="1.0"?><rss version="2.0"><channel><title>T</title>${old}
+      <item><title>novo</title><guid>new-1</guid><pubDate>Mon, 14 Sep 2026 10:00:00 GMT</pubDate></item>
+    </channel></rss>`;
+    const feed = await parseFeed(xml, "https://exemplo.com/feed.xml", { skipBefore: new Date("2026-01-01T00:00:00Z") });
+    expect(feed.items.map((item) => item.guid)).toEqual(["new-1"]);
+  });
+
+  it("marca item republicado para atualização", async () => {
+    const first = await parseFeed(rss, "https://exemplo.com/feed.xml");
+    const feed = await parseFeed(rss.replace("Olá", "Olá de novo"), "https://exemplo.com/feed.xml", {
+      existing: async () => new Map([["post-1", { publishedAt: first.items[0].publishedAt, contentHash: first.items[0].contentHash ?? null }]]),
+    });
+    expect(feed.items.map((item) => item.guid)).toEqual(["https://exemplo.com/posts/2"]);
+    expect(feed.changed).toHaveLength(1);
+    expect(feed.changed[0].guid).toBe("post-1");
+    expect(feed.changed[0].contentHtml).toContain("Olá de novo");
+  });
+});
+
+describe("decode and same site", () => {
+  it("tira aspas do charset antes de decodificar", () => {
+    expect(decodeFeedBody(Buffer.from("café", "latin1"), 'text/xml; charset="iso-8859-1"')).toBe("café");
+  });
+
+  it("aceita redirect permanente só no mesmo site", () => {
+    expect(sameSite("https://www.example.com/rss", "https://feeds.example.com/rss.xml")).toBe(true);
+    expect(sameSite("https://news.com.br/rss", "https://www.news.com.br/atom")).toBe(true);
+    expect(sameSite("https://example.com/rss", "https://evil.test/rss")).toBe(false);
   });
 });
 

@@ -155,6 +155,8 @@ model Article {
   contentHtml     String?
   snippet         String?
   imageUrl        String?
+  /// Impressão do título, link e HTML crus. Muda quando o feed republica o item.
+  contentHash     String?
   publishedAt     DateTime  @default(now())
   fullContentHtml String?
   storyId         String? // artigos de feeds diferentes sobre o mesmo fato compartilham este id
