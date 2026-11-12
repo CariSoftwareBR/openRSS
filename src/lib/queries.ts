@@ -150,6 +150,12 @@ const articleSelect = (userId: string) =>
     states: { where: { userId }, select: { isRead: true, isSaved: true, isHighlighted: true, priorityScore: true, priorityReason: true } },
   }) satisfies Prisma.ArticleSelect;
 
+/** A lista de "Hoje" carrega o dia inteiro para ordenar pela nota: sem o HTML, que só entra na página visível. */
+function articleSelectWithoutContent(userId: string) {
+  const { contentHtml: _contentHtml, ...rest } = articleSelect(userId);
+  return rest;
+}
+
 /**
  * Posição na lista para a próxima página. Cursor e não offset: com "só não lidos", ler artigos
  * (abrir, marcar, rolar) encolhe o conjunto e um offset pularia páginas inteiras.
@@ -204,13 +210,13 @@ export async function listArticles(
 
   if (scope.kind === "today") {
     // Ordena por prioridade da IA (quando houver) e depois por data, em memória (só o dia).
-    const rows = await db.article.findMany({ where, select: articleSelect(userId), orderBy: { publishedAt: "desc" } });
-    const sorted = group(rows.map(toListItem).sort(todayOrder));
+    const rows = await db.article.findMany({ where, select: articleSelectWithoutContent(userId), orderBy: { publishedAt: "desc" } });
+    const sorted = group(rows.map((row) => toListItem(row)).sort(todayOrder));
     const at = cursor ? { id: cursor.id, publishedAt: new Date(cursor.publishedAt), priorityScore: cursor.score ?? null } : null;
     const rest = at ? sorted.filter((item) => todayOrder(at, item) < 0) : sorted;
     const items = rest.slice(0, PAGE_SIZE);
     const hasMore = rest.length > PAGE_SIZE;
-    return { items: await withSemantic(items), hasMore, nextCursor: hasMore ? cursorOf(items.at(-1)!) : null };
+    return { items: await withSemantic(await withExcerpts(items)), hasMore, nextCursor: hasMore ? cursorOf(items.at(-1)!) : null };
   }
 
   const after: Prisma.ArticleWhereInput = cursor
@@ -255,7 +261,25 @@ export function groupByStory<T extends { id: string; storyId: string | null; tit
 
 export type RelatedSource = { id: string; title: string; feedTitle: string; isRead: boolean };
 
-function toListItem(a: Prisma.ArticleGetPayload<{ select: ReturnType<typeof articleSelect> }>) {
+type ListedArticle = Omit<Prisma.ArticleGetPayload<{ select: ReturnType<typeof articleSelect> }>, "contentHtml"> & {
+  contentHtml?: string | null;
+};
+
+async function withExcerpts(items: ArticleListItem[]) {
+  if (items.length === 0) return items;
+  const bodies = await db.article.findMany({
+    where: { id: { in: items.map((item) => item.id) } },
+    select: { id: true, contentHtml: true, snippet: true },
+  });
+  const byId = new Map(bodies.map((row) => [row.id, row]));
+  return items.map((item) => {
+    const body = byId.get(item.id);
+    if (!body) return item;
+    return { ...item, excerpt: truncate(stripHtml(body.contentHtml ?? body.snippet ?? ""), 700) || null };
+  });
+}
+
+function toListItem(a: ListedArticle) {
   const s = a.states[0];
   return {
     id: a.id,
