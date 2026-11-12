@@ -125,11 +125,40 @@ export function buildStories(rows: FrontRow[], now: Date): FrontStory[] {
       related,
       sourceCount: seenFeeds.size,
       updatedAt: new Date(Math.max(...group.map((r) => r.publishedAt.getTime()))),
-      folderId: lead.folderId,
+      folderId: sectionFolder(group),
       score: storyScore(group, now),
     });
   }
   return stories.sort((a, b) => b.score - a.score || +b.updatedAt - +a.updatedAt || (a.lead.id < b.lead.id ? -1 : 1));
+}
+
+/** Pasta da história: a da maioria das cópias. Empate fica com a nota da IA e a data, não com a foto. */
+function sectionFolder(group: FrontRow[]): string | null {
+  const buckets = new Map<string | null, { n: number; score: number; at: number }>();
+  for (const row of group) {
+    const cur = buckets.get(row.folderId) ?? { n: 0, score: -1, at: 0 };
+    cur.n += 1;
+    const score = row.priorityScore ?? -1;
+    const at = row.publishedAt.getTime();
+    if (score > cur.score || (score === cur.score && at > cur.at)) {
+      cur.score = score;
+      cur.at = at;
+    }
+    buckets.set(row.folderId, cur);
+  }
+  let best: string | null = null;
+  let bestN = -1;
+  let bestScore = -1;
+  let bestAt = -1;
+  for (const [folderId, cur] of buckets) {
+    if (cur.n > bestN || (cur.n === bestN && (cur.score > bestScore || (cur.score === bestScore && cur.at > bestAt)))) {
+      best = folderId;
+      bestN = cur.n;
+      bestScore = cur.score;
+      bestAt = cur.at;
+    }
+  }
+  return best;
 }
 
 /** Tira do array (in place) o primeiro item que satisfaz `test`, ou o primeiro de todos. */
@@ -140,6 +169,7 @@ function takePreferring<T>(list: T[], test: (item: T) => boolean, within = list.
 
 export function rankStories(rows: FrontRow[], folders: { id: string; name: string }[], now: Date): FrontPage {
   const pool = buildStories(rows, now);
+  const storyCount = pool.length;
   const withPhoto = (s: FrontStory) => hasImage(s.lead) || !s.lead.imageChecked;
 
   // Manchete: a mais importante, preferindo uma com foto entre as três primeiras.
@@ -164,7 +194,7 @@ export function rankStories(rows: FrontRow[], folders: { id: string; name: strin
     highlights,
     strip,
     sections,
-    articleCount: rows.length,
+    articleCount: storyCount,
     sourceCount: new Set(rows.map((r) => r.feed.id)).size,
   };
 }
