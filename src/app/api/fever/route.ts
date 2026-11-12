@@ -16,6 +16,7 @@ const secs = (d: Date | null | undefined) => (d ? Math.floor(d.getTime() / 1000)
 async function params(request: Request) {
   const url = new URL(request.url);
   const all = new URLSearchParams(url.search);
+  for (const key of [...all.keys()]) if (key.toLowerCase() === "api_key") all.delete(key);
   if (request.method === "POST") {
     const type = request.headers.get("content-type") ?? "";
     const body = type.includes("multipart/form-data")
@@ -144,7 +145,7 @@ async function handle(request: Request) {
   if (!user) return Response.json(base);
 
   await ensureMissingRefs(user.id);
-  if (p.has("mark")) await mark(user, p);
+  if (request.method === "POST" && p.has("mark")) await mark(user, p);
 
   const subs = await subscriptionsOf(user.id);
   const body: Record<string, unknown> = {

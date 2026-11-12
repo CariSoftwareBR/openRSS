@@ -37,8 +37,23 @@ export function parseItemId(raw: string): number | null {
   return Number.isSafeInteger(n) && n > 0 ? n : null;
 }
 
+function stripKey(params: URLSearchParams, name: string) {
+  for (const key of [...params.keys()]) if (key.toLowerCase() === name) params.delete(key);
+}
+
+async function readPostBody(request: Request) {
+  if (request.method !== "POST") return new URLSearchParams();
+  const type = request.headers.get("content-type") ?? "";
+  const entries = type.includes("multipart/form-data")
+    ? [...(await request.formData()).entries()].map(([k, v]) => [k, String(v)] as [string, string])
+    : [...new URLSearchParams(await request.text())];
+  return new URLSearchParams(entries);
+}
+
 async function readParams(request: Request) {
   const params = new URLSearchParams(new URL(request.url).search);
+  // A senha de aplicativo não pode ir na query: ela cai em log, histórico e Referer.
+  stripKey(params, "passwd");
   if (request.method === "POST") {
     const type = request.headers.get("content-type") ?? "";
     const body = type.includes("multipart/form-data")
@@ -324,7 +339,8 @@ async function streamContents(user: ApiUser, p: URLSearchParams, stream: string)
 
 export async function handleGReader(request: Request, path: string): Promise<Response> {
   if (path === "accounts/ClientLogin") {
-    const p = await readParams(request);
+    if (request.method !== "POST") return unauthorized();
+    const p = await readPostBody(request);
     const password = p.get("Passwd");
     const user = await userFromAppPassword(password);
     if (!user || user.email.toLowerCase() !== (p.get("Email") ?? "").trim().toLowerCase()) return unauthorized();
