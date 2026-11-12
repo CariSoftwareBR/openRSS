@@ -17,8 +17,9 @@ export default async function ArticlePage({ params }: PageProps<"/article/[id]">
 
   // O service worker baixa artigos para leitura offline: isso não conta como leitura.
   const offlineSync = (await headers()).get(OFFLINE_SYNC_HEADER) === "1";
-  if (!article.state?.isRead && !offlineSync) {
-    await db.userArticle.upsert({
+  let state = article.state;
+  if (!state?.isRead && !offlineSync) {
+    state = await db.userArticle.upsert({
       where: { userId_articleId: { userId: user.id, articleId: id } },
       create: { userId: user.id, articleId: id, isRead: true, readAt: new Date() },
       update: { isRead: true, readAt: new Date() },
@@ -30,5 +31,5 @@ export default async function ArticlePage({ params }: PageProps<"/article/[id]">
     db.ttsProvider.count({ where: { enabled: true, OR: [{ userId: user.id }, { userId: null }] } }),
   ]);
 
-  return <StandaloneReader article={{ ...article, state: article.state ? { ...article.state, isRead: true } : null }} aiEnabled={providers > 0} ttsEnabled={ttsProviders > 0} />;
+  return <StandaloneReader article={{ ...article, state }} aiEnabled={providers > 0} ttsEnabled={ttsProviders > 0} />;
 }

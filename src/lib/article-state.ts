@@ -1,5 +1,5 @@
 import "server-only";
-import { db } from "@/lib/db";
+import { db, getDbProvider } from "@/lib/db";
 
 /** Só artigos de feeds que o usuário assina, ou que ele salvou. */
 export function accessibleArticles(userId: string) {
@@ -22,10 +22,21 @@ export async function setArticleStates(userId: string, articleIds: string[], cha
   for (let i = 0; i < ids.length; i += 500) {
     const chunk = ids.slice(i, i + 500);
     await db.$transaction(async (tx) => {
+      if (getDbProvider() === "postgresql") {
+        // Duas marcas ao mesmo tempo não derrubam a transação. O SQLite não aceita skipDuplicates;
+        // lá o escritor único já serializa.
+        await tx.userArticle.createMany({
+          data: chunk.map((articleId) => ({ userId, articleId, ...data })),
+          // O client de tipos é o do SQLite, que recusa skipDuplicates; no Postgres o valor vale.
+          skipDuplicates: true as never,
+        });
+        await tx.userArticle.updateMany({ where: { userId, articleId: { in: chunk } }, data });
+        return;
+      }
       await tx.userArticle.updateMany({ where: { userId, articleId: { in: chunk } }, data });
       const existing = await tx.userArticle.findMany({ where: { userId, articleId: { in: chunk } }, select: { articleId: true } });
-      const known = new Set(existing.map((r) => r.articleId));
-      const missing = chunk.filter((id) => !known.has(id));
+      const known = new Set(existing.map((row) => row.articleId));
+      const missing = chunk.filter((articleId) => !known.has(articleId));
       if (missing.length) await tx.userArticle.createMany({ data: missing.map((articleId) => ({ userId, articleId, ...data })) });
     });
   }
@@ -39,10 +50,10 @@ export async function markStorySiblingsRead(userId: string, articleId: string) {
 
 /** Versão em lote (rolagem): três consultas no total, não três por artigo. */
 export async function markStorySiblingsReadMany(userId: string, articleIds: string[]) {
-  if (articleIds.length === 0) return 0;
+  if (articleIds.length === 0) return [];
   const read = await db.article.findMany({ where: { id: { in: articleIds }, storyId: { not: null } }, select: { storyId: true } });
   const storyIds = [...new Set(read.map((a) => a.storyId!))];
-  if (storyIds.length === 0) return 0;
+  if (storyIds.length === 0) return [];
   const siblings = await db.article.findMany({
     where: {
       storyId: { in: storyIds },
@@ -52,5 +63,7 @@ export async function markStorySiblingsReadMany(userId: string, articleIds: stri
     },
     select: { id: true },
   });
-  return setArticleStates(userId, siblings.map((s) => s.id), { isRead: true });
+  const ids = siblings.map((s) => s.id);
+  if (ids.length) await setArticleStates(userId, ids, { isRead: true });
+  return ids;
 }
