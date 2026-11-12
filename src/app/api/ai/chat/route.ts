@@ -11,12 +11,16 @@ import { articleText, errorMessage, languageInstruction } from "@/lib/ai/content
 import { parseJsonArray, truncate } from "@/lib/utils";
 import { acquireLock } from "@/lib/jobs/lock";
 import { semanticSearch } from "@/lib/ai/embeddings";
+import { aiQuotaResponse, allowSharedAiCall } from "@/lib/ai/quota";
 
 export const maxDuration = 120;
 
+const MAX_CHAT_MESSAGES = 40;
+const MAX_CHAT_CHARS = 100_000;
+
 const body = z.object({
   threadId: z.string(),
-  messages: z.array(z.custom<UIMessage>((m) => typeof m === "object" && m !== null && "role" in m)),
+  messages: z.array(z.custom<UIMessage>((m) => typeof m === "object" && m !== null && "role" in m)).max(500),
   // Escolhas do compositor (opcionais): provedor, modelo e nível de raciocínio.
   providerId: z.string().optional(),
   model: z.string().max(200).optional(),
@@ -29,7 +33,11 @@ export async function POST(request: Request) {
 
   const parsed = body.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return new Response("Bad request", { status: 400 });
-  const { threadId, messages, providerId, model, reasoning } = parsed.data;
+  const { threadId, providerId, model, reasoning } = parsed.data;
+  const messages = parsed.data.messages
+    .filter((message) => message.role === "user" || message.role === "assistant" || message.role === "system")
+    .slice(-MAX_CHAT_MESSAGES);
+  if (JSON.stringify(messages).length > MAX_CHAT_CHARS) return new Response("Payload too large", { status: 413 });
 
   const thread = await db.chatThread.findFirst({ where: { id: threadId, userId: user.id } });
   if (!thread) return new Response("Not found", { status: 404 });
@@ -43,11 +51,18 @@ export async function POST(request: Request) {
     return Response.json({ error: errorMessage(err, locale) }, { status: 400 });
   }
 
+  if (!allowSharedAiCall(user.id, resolved.provider.userId == null)) return aiQuotaResponse();
+
   const subscribed = { feed: { subscriptions: { some: { userId: user.id } } } };
-  // Artigos da conversa: assinados ou salvos (links avulsos salvos não têm assinatura).
-  const contextArticles = await db.article.findMany({
-    where: { id: { in: parseJsonArray(thread.articleIds) }, ...accessibleArticles(user.id) },
-    take: 5,
+  // Artigos da conversa, na ordem em que foram anexados (no máximo cinco).
+  const contextIds = parseJsonArray(thread.articleIds).slice(0, 5);
+  const contextRows = contextIds.length
+    ? await db.article.findMany({ where: { id: { in: contextIds }, ...accessibleArticles(user.id) } })
+    : [];
+  const contextById = new Map(contextRows.map((article) => [article.id, article]));
+  const contextArticles = contextIds.flatMap((id) => {
+    const article = contextById.get(id);
+    return article ? [article] : [];
   });
 
   const tools = {

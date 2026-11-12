@@ -8,6 +8,7 @@ import { getUserSettings } from "@/lib/app-settings";
 import { resolveModel } from "@/lib/ai/providers";
 import { sanitizeArticleHtml } from "@/lib/feeds/sanitize";
 import { articleHtml, errorMessage, languageInstruction, languageName } from "@/lib/ai/content";
+import { aiQuotaResponse, allowSharedAiCall } from "@/lib/ai/quota";
 
 const body = z.object({ articleId: z.string(), force: z.boolean().optional() });
 
@@ -31,6 +32,7 @@ export async function POST(request: Request) {
   } catch (err) {
     return Response.json({ error: errorMessage(err, await getLocale()) }, { status: 400 });
   }
+  if (!allowSharedAiCall(user.id, resolved.provider.userId == null)) return aiQuotaResponse();
 
   const cacheKey = {
     articleId,
