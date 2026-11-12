@@ -7,6 +7,7 @@ import { getApiUser } from "@/lib/session";
 import { articleText, errorMessage } from "@/lib/ai/content";
 import { localizeError, LocalizedError } from "@/lib/localized-error";
 import { mergeAudioParts, requestSpeech, resolveTtsProvider, ttsMimeType } from "@/lib/ai/tts";
+import { aiQuotaResponse, allowSharedAiCall } from "@/lib/ai/quota";
 
 const body = z.object({
   articleId: z.string(),
@@ -28,6 +29,7 @@ export async function POST(request: Request) {
 
   try {
     const provider = await resolveTtsProvider(user.id);
+    if (!allowSharedAiCall(user.id, provider.userId == null)) return aiQuotaResponse();
     const speechText = parsed.data.source === "summary"
       ? parsed.data.text!
           .replace(/\[([^\]]+)]\([^)]+\)/g, "$1")

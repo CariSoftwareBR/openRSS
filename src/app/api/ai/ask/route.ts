@@ -6,6 +6,7 @@ import { getApiUser } from "@/lib/session";
 import { getUserSettings } from "@/lib/app-settings";
 import { resolveModel } from "@/lib/ai/providers";
 import { articleText, errorMessage, languageInstruction } from "@/lib/ai/content";
+import { aiQuotaResponse, allowSharedAiCall } from "@/lib/ai/quota";
 import { accessibleArticles } from "@/lib/article-state";
 
 const MAX_HISTORY = 10;
@@ -39,6 +40,7 @@ export async function POST(request: Request) {
   } catch (err) {
     return Response.json({ error: errorMessage(err, await getLocale()) }, { status: 400 });
   }
+  if (!allowSharedAiCall(user.id, resolved.provider.userId == null)) return aiQuotaResponse();
 
   const result = streamText({
     model: resolved.model,
