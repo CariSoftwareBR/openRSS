@@ -228,7 +228,7 @@ to `docker-compose.yml` and run `docker compose up -d` again.
 | `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | — | Client credentials at the provider (Authentik, Authelia, Keycloak…) |
 | `OIDC_PROVIDER_NAME` | `SSO` | Name on the “Sign in with …” button |
 | `OIDC_SCOPES` | `openid email profile` | Requested scopes |
-| `OIDC_AUTO_REGISTER` | `true` | Create an account for anyone the provider authenticates; with `false`, the instance's open-registration setting applies |
+| `OIDC_AUTO_REGISTER` | `false` | Create an account for anyone the provider authenticates. Off by default, so closed registration also blocks new SSO accounts until this is `true` |
 | `OIDC_DISABLE_PASSWORD_LOGIN` | `false` | SSO only: hides and disables password sign-in |
 
 </details>
