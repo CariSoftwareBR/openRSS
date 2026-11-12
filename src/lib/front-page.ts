@@ -7,6 +7,8 @@ export type { FrontArticle, FrontStory, FrontSection, FrontPage } from "@/lib/fr
 
 /** Janela da capa: o noticiário das últimas horas, como num portal. */
 const WINDOW_MS = 72 * 3600_000;
+/** Folga de relógio. Datas mais à frente que isto (feed carimbado em 2030) não entram na capa. */
+const FUTURE_SKEW_MS = 24 * 3600_000;
 const MAX_ROWS = 600;
 /** Com pouca coisa na janela (feeds parados, instalação nova), cai para os mais recentes. */
 const MIN_ROWS = 30;
@@ -27,17 +29,20 @@ export async function getFrontPage(userId: string, now = new Date()) {
     states: { where: { userId }, select: { isRead: true, isSaved: true, isHighlighted: true, priorityScore: true } },
   } as const;
 
+  const latest = new Date(now.getTime() + FUTURE_SKEW_MS);
   const [folders, recent] = await Promise.all([
     db.folder.findMany({ where: { userId }, orderBy: [{ position: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
     db.article.findMany({
-      where: { ...subscribed, publishedAt: { gte: new Date(now.getTime() - WINDOW_MS) } },
+      where: { ...subscribed, publishedAt: { gte: new Date(now.getTime() - WINDOW_MS), lte: latest } },
       select,
       orderBy: { publishedAt: "desc" },
       take: MAX_ROWS,
     }),
   ]);
   const rows =
-    recent.length >= MIN_ROWS ? recent : await db.article.findMany({ where: subscribed, select, orderBy: { publishedAt: "desc" }, take: FALLBACK_ROWS });
+    recent.length >= MIN_ROWS
+      ? recent
+      : await db.article.findMany({ where: { ...subscribed, publishedAt: { lte: latest } }, select, orderBy: { publishedAt: "desc" }, take: FALLBACK_ROWS });
 
   const flat: FrontRow[] = rows.map((a) => {
     const sub = a.feed.subscriptions[0];

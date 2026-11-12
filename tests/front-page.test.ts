@@ -50,6 +50,15 @@ describe("buildStories", () => {
     expect(buildStories([plain, photo], now)[0].lead.id).toBe(photo.id);
   });
 
+  it("a seção segue a pasta da maioria, não a cópia com foto", () => {
+    const tech = row({ storyId: "s", feed: "a", folderId: "tec" });
+    const tech2 = row({ storyId: "s", feed: "b", folderId: "tec" });
+    const sports = row({ storyId: "s", feed: "c", folderId: "esp", imageUrl: "https://img/x.jpg" });
+    const [story] = buildStories([tech, tech2, sports], now);
+    expect(story.lead.id).toBe(sports.id);
+    expect(story.folderId).toBe("tec");
+  });
+
   it("rebaixa o que já foi lido", () => {
     const read = row({ isRead: true, publishedAt: hoursAgo(0) });
     const unread = row({ publishedAt: hoursAgo(3) });
@@ -76,6 +85,12 @@ describe("rankStories", () => {
     const shown = [page.headline!, ...page.highlights, ...page.strip, ...page.sections.flatMap((s) => s.stories)].map((s) => s.lead.id);
     expect(new Set(shown).size).toBe(shown.length);
     expect(page.sections.map((s) => s.name)).toEqual(["Tecnologia", "Esportes", null]);
+  });
+
+  it("conta histórias, não cada cópia do mesmo fato", () => {
+    const page = rankStories([row({ storyId: "s", feed: "a" }), row({ storyId: "s", feed: "b" })], [], now);
+    expect(page.articleCount).toBe(1);
+    expect(page.sourceCount).toBe(2);
   });
 
   it("sem notícias, não há manchete", () => {
