@@ -36,7 +36,7 @@
     "better-auth": "^1.7.27",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "croner": "^11.0.0",
+    "croner": "^11.0.1",
     "dompurify": "^3.4.18",
     "dotenv": "^18.0.10",
     "linkedom": "^0.18.15",
